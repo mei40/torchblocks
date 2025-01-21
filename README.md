@@ -1,2 +1,6 @@
 # torchblocks
-A GUI-based tool for constructing, training and testing neural networks in PyTorch. 
+This project is a work in progress.
+
+Development is done for the purpose of ECE49595O.
+
+Stay tuned.
