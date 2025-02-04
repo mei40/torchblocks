@@ -1,6 +1,6 @@
 // derived from antlr/grammars-v4
 
-grammar JSON;
+grammar modelParser;
 
 json
     : value EOF
