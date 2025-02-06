@@ -1,0 +1,50 @@
+name: ANTLR CI
+
+on:
+  push: {}        # triggers on push to any branch
+  pull_request: {}  # triggers on any pull request
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install ANTLR
+        run: |
+          # Download the ANTLR jar
+          curl -O https://www.antlr.org/download/antlr-4.13.1-complete.jar
+          # Move it to a system location
+          sudo mv antlr-4.13.1-complete.jar /usr/local/bin/antlr4.jar
+          # Create a wrapper script for the antlr4 command so that it is available in PATH.
+          echo '#!/bin/bash' | sudo tee /usr/local/bin/antlr4
+          echo 'java -jar /usr/local/bin/antlr4.jar "$@"' | sudo tee -a /usr/local/bin/antlr4
+          sudo chmod +x /usr/local/bin/antlr4
+
+      - name: Install Python dependencies
+        run: |
+          pip install antlr4-python3-runtime
+
+      - name: Generate parser
+        run: |
+          make compiler
+
+      # - name: Run tests
+      #   run: |
+      #     pytest tests/
