@@ -42,9 +42,9 @@ jobs:
           pip install antlr4-python3-runtime
       
       - name: Run linting
-              run: |
-                # Run flake8
-                python -m flake8 backend --count --select=E9,F63,F7,F82 --show-source --statistics
+        run: |
+          # Run flake8
+          python -m flake8 backend --count --select=E9,F63,F7,F82 --show-source --statistics
 
       - name: Generate parser
         run: |
