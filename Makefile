@@ -4,6 +4,10 @@ compiler:
 	@echo "building antlr parser"
 	antlr4 -o build -Dlanguage=Python3 $(ANTLR_SCRIPT)
 
+compilertest:
+	@echo "testing compiler..."
+	cd backend/antlr; python.exe codeGenTester.py
+
 clean:
 	@echo "Removing temporary files"
 	@echo "Deleting build files..."
