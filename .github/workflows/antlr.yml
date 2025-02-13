@@ -51,6 +51,10 @@ jobs:
         run: |
           make compiler
 
+      - name: Test parser
+        run: |
+          make compilertest
+
       # - name: Run tests
       #   run: |
       #     pytest tests/
