@@ -1,0 +1,18 @@
+{
+    "packet_type": "model_params", 
+    "model": {
+        "layers": [
+            {
+                "layer_type": "linear",
+                "in_shape": 64, 
+                "out_shape": 5
+            }, 
+            {
+                "layer_type": "relu"
+            }, 
+            {
+                "layer_type": "log_softmax"
+            }
+        ]
+    } 
+}
