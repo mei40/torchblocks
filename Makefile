@@ -6,7 +6,7 @@ compiler:
 
 compilertest:
 	@echo "testing compiler..."
-	cd backend/antlr; python.exe codeGenTester.py
+	cd backend/antlr; python3 codeGenTester.py
 
 clean:
 	@echo "Removing temporary files"
