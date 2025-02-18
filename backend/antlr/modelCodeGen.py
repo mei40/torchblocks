@@ -34,6 +34,7 @@ class CodeGenerator():
         # Generates the init and forward functions of the class
         linelist = [f"class {self.name}(torch.nn.Module):"]
         linelist.append(self.codegen_model_init())
+        linelist.append(self.codegen_model_forward())
         return linelist
     
     def codegen_model_init(self):
@@ -43,11 +44,31 @@ class CodeGenerator():
         curr_layer = 1
         for layer in self.model_dict["layers"]:
             if layer["layer_type"] == "linear":
-                layerlist.append(f"self.layer{curr_layer} = torch.nn.Linear({layer["in_shape"]}, {layer["out_shape"]})")
+                in_shape = layer["in_shape"]
+                out_shape = layer["out_shape"]
+                layerlist.append(f"self.layer{curr_layer} = torch.nn.Linear({in_shape}, {out_shape})")
             elif layer["layer_type"] == "relu":
                 layerlist.append(f"self.layer{curr_layer} = torch.nn.functional.relu")
             elif layer["layer_type"] == "log_softmax":
                 layerlist.append(f"self.layer{curr_layer} = torch.nn.functional.log_softmax")
+            #more layer types should be added here
             curr_layer += 1
+        linelist.append(layerlist)
+        return linelist
+    
+    def codegen_model_forward(self):
+        # Generates the forward method for the neural network
+        # Backwards method/gradient descent is superseded within the nn.Module class
+        linelist = ["def forward(self, curr_tensor):"]
+        layerlist = []
+        curr_layer = 1
+        for layer in self.model_dict["layers"]:
+            if layer["layer_type"] == "log_softmax":
+                layerlist.append(f"curr_tensor = self.layer{curr_layer}(curr_tensor, -1)")
+            # more layer edge cases should be added here
+            else:
+                layerlist.append(f"curr_tensor = self.layer{curr_layer}(curr_tensor)")
+            curr_layer += 1
+        layerlist.append("return curr_tensor")
         linelist.append(layerlist)
         return linelist
