@@ -9,6 +9,8 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+# compiler will build its own files
+backend/antlr/build/ 
 develop-eggs/
 dist/
 downloads/
