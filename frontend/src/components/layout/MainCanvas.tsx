@@ -17,6 +17,10 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
+interface MainCanvasProps {
+  onNodeSelect: (node: Node | null) => void;
+}
+
 // Custom node types
 const nodeTypes = {
   linear: LinearNode,
@@ -54,14 +58,21 @@ function ReluNode() {
   );
 }
 
-export const MainCanvas = () => {
+export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [isTrashActive, setIsTrashActive] = useState(false);
-  
-  // Track currently dragged node
   const draggedNode = useRef<Node | null>(null);
+
+  // Add node selection handler
+  const handleNodeClick = (event: React.MouseEvent, node: Node) => {
+    onNodeSelect(node);
+  };
+
+  const handlePaneClick = () => {
+    onNodeSelect(null);
+  };
 
   const onConnect = useCallback(
     (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
@@ -165,6 +176,8 @@ export const MainCanvas = () => {
         onNodeDragStart={onNodeDragStart}
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
+        onNodeClick={handleNodeClick}
+        onPaneClick={handlePaneClick}
         nodeTypes={nodeTypes}
         fitView
         className="bg-gray-50"
