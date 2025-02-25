@@ -1,11 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useStore } from '../../store/useStore';
+import { downloadNetworkJson, saveNetworkJsonToServer } from '../visualization/networkToJson';
 
 export const Header = () => {
   const [showNotification, setShowNotification] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState('');
   const [logs, setLogs] = useState('');
   const [showLogs, setShowLogs] = useState(false);
+  const { blocks, connections } = useStore();
 
   const runTests = async () => {
     try {
@@ -15,6 +19,7 @@ export const Header = () => {
       });
       
       if (response.ok) {
+        setNotificationMessage('Test completed successfully');
         setShowNotification(true);
         // Auto-hide notification after 5 seconds
         setTimeout(() => setShowNotification(false), 5000);
@@ -41,6 +46,17 @@ export const Header = () => {
     }
   };
 
+  const handleExport = () => {
+    downloadNetworkJson(blocks, connections, 'torchblocks_model.json');
+  };
+  
+  const handleSave = async () => {
+    const result = await saveNetworkJsonToServer(blocks, connections, 'model.json');
+    setNotificationMessage(result.message);
+    setShowNotification(true);
+    setTimeout(() => setShowNotification(false), 5000);
+  };
+
   return (
     <header className="h-14 border-b border-gray-200 bg-white relative"> 
       <div className="h-full px-4 flex items-center justify-between">
@@ -52,10 +68,16 @@ export const Header = () => {
           >
             Run Test
           </button>
-          <button className="px-4 py-2 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600">
+          <button 
+            onClick={handleSave}
+            className="px-4 py-2 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600"
+          >
             Save
           </button>
-          <button className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200">
+          <button 
+            onClick={handleExport}
+            className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+          >
             Export
           </button>
         </div>
@@ -65,7 +87,7 @@ export const Header = () => {
       {showNotification && (
         <div className="absolute top-16 right-4 bg-white shadow-lg rounded-md p-4 border border-gray-200 w-80 z-50">
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-medium">Test Completed</h3>
+            <h3 className="font-medium">Notification</h3>
             <button 
               onClick={() => setShowNotification(false)}
               className="text-gray-500 hover:text-gray-700"
@@ -73,13 +95,15 @@ export const Header = () => {
               ×
             </button>
           </div>
-          <p className="text-sm text-gray-600 mb-3">The test has been completed successfully.</p>
-          <button
-            onClick={fetchLogs}
-            className="w-full px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600"
-          >
-            Show Logs
-          </button>
+          <p className="text-sm text-gray-600 mb-3">{notificationMessage}</p>
+          {notificationMessage.includes('Test completed') && (
+            <button
+              onClick={fetchLogs}
+              className="w-full px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600"
+            >
+              Show Logs
+            </button>
+          )}
         </div>
       )}
 
