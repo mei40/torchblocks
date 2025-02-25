@@ -2,6 +2,18 @@ import React from 'react';
 
 const componentsList = [
   {
+    id: 'input',
+    name: 'Input',
+    category: 'Special',
+    description: 'Input features',
+  },
+  {
+    id: 'output',
+    name: 'Output',
+    category: 'Special',
+    description: 'Output neurons',
+  },
+  {
     id: 'linear',
     name: 'Linear Layer',
     category: 'Layers',
@@ -48,7 +60,10 @@ export const Sidebar = () => {
               {components.map((component) => (
                 <div
                   key={component.id}
-                  className="p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-move transition-colors"
+                  className={`p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-move transition-colors ${
+                    component.id === 'input' ? 'bg-gray-100' : 
+                    component.id === 'output' ? 'bg-green-50' : ''
+                  }`}
                   draggable
                   onDragStart={(e) => onDragStart(e, component.id)}
                 >
@@ -61,6 +76,16 @@ export const Sidebar = () => {
             </div>
           </div>
         ))}
+        
+        <div className="mt-6 p-3 border border-gray-200 rounded-md bg-blue-50">
+          <h3 className="text-sm font-medium">How to use</h3>
+          <ol className="text-xs text-gray-600 list-decimal pl-4 mt-2 space-y-1">
+            <li>Drag components onto the canvas</li>
+            <li>Connect outputs to inputs</li>
+            <li>Switch views to see your model architecture</li>
+            <li>Export your model to PyTorch code</li>
+          </ol>
+        </div>
       </div>
     </div>
   );
