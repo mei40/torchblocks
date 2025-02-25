@@ -20,8 +20,8 @@ class CodeGenerator():
     
     def codegen_model_dependencies(self):
         # Any needed imports will be 
-        linelist = ["import torch"\
-                    ]
+        linelist = ["import torch",
+                    "import torchvision"]
         return linelist
     
     def codegen_model(self):
@@ -38,10 +38,21 @@ class CodeGenerator():
         return linelist
     
     def codegen_model_init(self):
-        # Initializes all specified layers
         linelist = ["def __init__(self):"]
         layerlist = [f"super({self.name}, self).__init__()"]
         curr_layer = 1
+        # initialize hyperparameters of the model
+        dataset = self.model_dict["dataset"]
+        loss_function = self.model_dict["loss_function"]
+        optimizer = self.model_dict["optimizer"]
+        if dataset == "mnist":
+            layerlist.append("self.train_dataset = torchvision.datasets.MNIST('build/data', train=True, download=True, transform=torchvision.transforms.ToTensor())")
+            layerlist.append("self.test_dataset = torchvision.datasets.MNIST('build/data', train=False, download=True, transform=torchvision.transforms.ToTensor())")
+
+        if loss_function == "crossentropyloss":
+            layerlist.append("self.loss_function = torch.nn.CrossEntropyLoss()")
+
+        # Initializes all specified layers
         for layer in self.model_dict["layers"]:
             if layer["layer_type"] == "linear":
                 in_shape = layer["in_shape"]
@@ -53,6 +64,11 @@ class CodeGenerator():
                 layerlist.append(f"self.layer{curr_layer} = torch.nn.functional.log_softmax")
             #more layer types should be added here
             curr_layer += 1
+
+        if optimizer["name"] == "adam":
+            learning_rate = float(optimizer["lr"])
+            layerlist.append(f"self.optimizer = torch.optim.Adam(self.parameters(), lr={learning_rate})")
+
         linelist.append(layerlist)
         return linelist
     

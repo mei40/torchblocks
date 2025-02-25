@@ -1,6 +1,9 @@
 {
     "packet_type": "model_params", 
     "model": {
+        "dataset": "mnist",
+        "loss_function": "crossentropyloss",
+        "optimizer": {"name": "adam", "lr": 0.001},
         "layers": [
             {
                 "layer_type": "linear",
