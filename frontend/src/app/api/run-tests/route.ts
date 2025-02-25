@@ -4,7 +4,7 @@ import path from 'path';
 
 export async function POST() {
   try {
-    const scriptPath = path.resolve(process.cwd(), '../../torchblocks/backend/antlr/run_testall.sh');
+    const scriptPath = path.resolve(process.cwd(), '../../torchblocks/backend/antlr/run_all.sh');
     
     // Execute the shell script
     await new Promise<void>((resolve, reject) => {
