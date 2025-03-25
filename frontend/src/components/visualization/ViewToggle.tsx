@@ -1,53 +1,55 @@
 'use client';
 
 import React from 'react';
-import { useStore, ViewMode } from '../../store/useStore';
+import { useStore } from '../../store/useStore';
+
+export type ViewMode = 'blocks' | 'layers' | 'neurons' | 'testResults';
 
 const ViewToggle: React.FC = () => {
-  const { viewMode, setViewMode } = useStore(state => ({
-    viewMode: state.viewMode,
-    setViewMode: state.setViewMode
-  }));
-
-  const handleViewChange = (mode: ViewMode) => {
-    setViewMode(mode);
-  };
+  const { viewMode, setViewMode } = useStore();
 
   return (
-    <div className="flex items-center">
-      <div className="mr-2 text-sm font-medium text-gray-600">View Mode:</div>
-      <div className="flex rounded-md overflow-hidden border border-gray-300">
-        <button
-          onClick={() => handleViewChange('blocks')}
-          className={`px-4 py-1 text-sm transition-colors ${
-            viewMode === 'blocks' 
-              ? 'bg-blue-500 text-white' 
-              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          Blocks
-        </button>
-        <button
-          onClick={() => handleViewChange('layers')}
-          className={`px-4 py-1 text-sm transition-colors border-l border-r border-gray-300 ${
-            viewMode === 'layers' 
-              ? 'bg-blue-500 text-white' 
-              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          Layers
-        </button>
-        <button
-          onClick={() => handleViewChange('neurons')}
-          className={`px-4 py-1 text-sm transition-colors ${
-            viewMode === 'neurons' 
-              ? 'bg-blue-500 text-white' 
-              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          Neurons
-        </button>
-      </div>
+    <div className="flex space-x-2">
+      <button
+        onClick={() => setViewMode('blocks')}
+        className={`px-4 py-2 rounded ${
+          viewMode === 'blocks'
+            ? 'bg-blue-500 text-white'
+            : 'bg-gray-100 hover:bg-gray-200'
+        }`}
+      >
+        Blocks
+      </button>
+      <button
+        onClick={() => setViewMode('layers')}
+        className={`px-4 py-2 rounded ${
+          viewMode === 'layers'
+            ? 'bg-blue-500 text-white'
+            : 'bg-gray-100 hover:bg-gray-200'
+        }`}
+      >
+        Layers
+      </button>
+      <button
+        onClick={() => setViewMode('neurons')}
+        className={`px-4 py-2 rounded ${
+          viewMode === 'neurons'
+            ? 'bg-blue-500 text-white'
+            : 'bg-gray-100 hover:bg-gray-200'
+        }`}
+      >
+        Neurons
+      </button>
+      <button
+        onClick={() => setViewMode('testResults')}
+        className={`px-4 py-2 rounded ${
+          viewMode === 'testResults'
+            ? 'bg-blue-500 text-white'
+            : 'bg-gray-100 hover:bg-gray-200'
+        }`}
+      >
+        Test Results
+      </button>
     </div>
   );
 };
