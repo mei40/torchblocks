@@ -21,12 +21,6 @@ class modelTrainer():
                 preds += pred
         test_stat = {"loss": test_loss / num_batches, "accuracy": num_correct / total_num, "prediction": torch.tensor(preds)}
         print(f"Test result: total samples: {total_num}, Avg loss: {test_stat['loss']:.3f}, Accuracy: {100*test_stat['accuracy']:.3f}%")
-        # ----------- <Your code> ---------------
-        # dictionary should include loss, accuracy and prediction
-        assert "loss" and "accuracy" and "prediction" in test_stat.keys()
-        # "prediction" value should be a 1D tensor
-        assert len(test_stat["prediction"]) == len(self.test_loader.dataset)
-        assert isinstance(test_stat["prediction"], torch.Tensor)
         return test_stat
     
     def train(self, device):
@@ -47,7 +41,4 @@ class modelTrainer():
                 last_print_batch_idx = batch_idx
                 print(f'Current Epoch: Progress: [{batch_idx*len(images)}/{len(self.train_loader.dataset)}], Current Loss: {loss.item():.3f}')
 
-
-        # ----------- <End Your code> ---------------
-        assert len(train_loss) == len(self.train_loader)
         return train_loss

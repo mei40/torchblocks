@@ -53,6 +53,8 @@ class CodeGenerator():
         #Handle loss function:
         if loss_function == "crossentropyloss":
             layerlist.append("self.loss_function = torch.nn.CrossEntropyLoss()")
+        elif loss_function == "mseloss":
+            layerlist.append("self.loss_function = torch.nn.MSELoss()")
 
         # Initializes all specified layers
         for layer in self.model_dict["layers"]:
@@ -61,21 +63,33 @@ class CodeGenerator():
                 in_shape = layer["in_shape"]
                 out_shape = layer["out_shape"]
                 layerlist.append(f"self.layer{curr_layer} = torch.nn.Linear({in_shape}, {out_shape})")
+            if layer["layer_type"] == "conv2d":
+                pass # constraints need to be defined
+
             # Activation Functions:
             elif layer["layer_type"] == "relu":
                 layerlist.append(f"self.layer{curr_layer} = torch.nn.functional.relu")
+            elif layer["layer_type"] == "sigmoid":
+                layerlist.append(f"self.layer{curr_layer} = torch.nn.functional.sigmoid")
+            elif layer["layer_type"] == "tanh":
+                layerlist.append(f"self.layer{curr_layer} = torch.nn.functional.tanh")
+
             # Other blocks:
             elif layer["layer_type"] == "log_softmax":
                 layerlist.append(f"self.layer{curr_layer} = torch.nn.functional.log_softmax")
             elif layer["layer_type"] == "view":
-                pass
-            #more layer types should be added here
+                pass #handle within forward function
+
             curr_layer += 1
 
         #Handle optimizer:
         if optimizer["name"] == "adam":
             learning_rate = float(optimizer["lr"])
             layerlist.append(f"self.optimizer = torch.optim.Adam(self.parameters(), lr={learning_rate})")
+        elif optimizer["name"] == "sgd":
+            learning_rate = float(optimizer["lr"])
+            momentum = float(optimizer["momentum"])
+            layerlist.append(f"self.optimizer = torch.optim.SGD(self.parameters(), lr={learning_rate}, momentum={momentum})")
 
         linelist.append(layerlist)
         return linelist
@@ -94,6 +108,10 @@ class CodeGenerator():
             elif layer["layer_type"] == "view":
                 shape1 = tuple(layer["shape"])
                 layerlist.append(f"curr_tensor = curr_tensor.view{shape1}") #parentheses are added
+
+            elif layer["layer_type"] == "maxpool2d":
+                kernel_size = int(layer["kernel_size"])
+                layerlist.append(f"curr_tensor = torch.nn.functional.max_pool2d(curr_tensor, kernel_size={kernel_size})") #parentheses are added
             # more layer edge cases should be added here
 
             else:
