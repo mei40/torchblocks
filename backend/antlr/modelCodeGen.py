@@ -45,26 +45,34 @@ class CodeGenerator():
         dataset = self.model_dict["dataset"]
         loss_function = self.model_dict["loss_function"]
         optimizer = self.model_dict["optimizer"]
+        #Handle dataset:
         if dataset == "mnist":
             layerlist.append("self.train_dataset = torchvision.datasets.MNIST('build/data', train=True, download=True, transform=torchvision.transforms.ToTensor())")
             layerlist.append("self.test_dataset = torchvision.datasets.MNIST('build/data', train=False, download=True, transform=torchvision.transforms.ToTensor())")
 
+        #Handle loss function:
         if loss_function == "crossentropyloss":
             layerlist.append("self.loss_function = torch.nn.CrossEntropyLoss()")
 
         # Initializes all specified layers
         for layer in self.model_dict["layers"]:
+            # Layer blocks:
             if layer["layer_type"] == "linear":
                 in_shape = layer["in_shape"]
                 out_shape = layer["out_shape"]
                 layerlist.append(f"self.layer{curr_layer} = torch.nn.Linear({in_shape}, {out_shape})")
+            # Activation Functions:
             elif layer["layer_type"] == "relu":
                 layerlist.append(f"self.layer{curr_layer} = torch.nn.functional.relu")
+            # Other blocks:
             elif layer["layer_type"] == "log_softmax":
                 layerlist.append(f"self.layer{curr_layer} = torch.nn.functional.log_softmax")
+            elif layer["layer_type"] == "view":
+                pass
             #more layer types should be added here
             curr_layer += 1
 
+        #Handle optimizer:
         if optimizer["name"] == "adam":
             learning_rate = float(optimizer["lr"])
             layerlist.append(f"self.optimizer = torch.optim.Adam(self.parameters(), lr={learning_rate})")
@@ -79,9 +87,15 @@ class CodeGenerator():
         layerlist = []
         curr_layer = 1
         for layer in self.model_dict["layers"]:
+
             if layer["layer_type"] == "log_softmax":
                 layerlist.append(f"curr_tensor = self.layer{curr_layer}(curr_tensor, -1)")
+
+            elif layer["layer_type"] == "view":
+                shape1 = tuple(layer["shape"])
+                layerlist.append(f"curr_tensor = curr_tensor.view{shape1}") #parentheses are added
             # more layer edge cases should be added here
+
             else:
                 layerlist.append(f"curr_tensor = self.layer{curr_layer}(curr_tensor)")
             curr_layer += 1

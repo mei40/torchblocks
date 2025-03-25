@@ -6,9 +6,13 @@
         "optimizer": {"name": "adam", "lr": 0.001},
         "layers": [
             {
+                "layer_type": "view", 
+                "shape": [-1, 784]
+            },
+            {
                 "layer_type": "linear",
-                "in_shape": 64, 
-                "out_shape": 5
+                "in_shape": 784, 
+                "out_shape": 10
             }, 
             {
                 "layer_type": "relu"

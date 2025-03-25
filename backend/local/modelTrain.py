@@ -9,17 +9,18 @@ class modelTrainer():
     def test(self, device):
         test_loss = 0
         num_correct = 0
-        total_num = len(self.model.test_loader.dataset)
+        total_num = len(self.test_loader.dataset)
+        num_batches = len(self.test_loader)
         preds = []
         with torch.no_grad():
             for images, targets in self.test_loader:
                 test_output = self.model(images.to(device))
-                test_loss += self.model.loss_fn(test_output, targets.to(device)).item()
+                test_loss += self.model.loss_function(test_output, targets.to(device)).item()
                 pred = test_output.data.max(1, keepdim=True)[1]
                 num_correct += pred.eq(targets.to(device).data.view_as(pred)).sum()
                 preds += pred
-        test_stat = {"loss": test_loss / total_num, "accuracy": num_correct / total_num, "prediction": torch.tensor(preds)}
-        print(f"Test result: total sample: {total_num}, Avg loss: {test_stat['loss']:.3f}, Acc: {100*test_stat['accuracy']:.3f}%")
+        test_stat = {"loss": test_loss / num_batches, "accuracy": num_correct / total_num, "prediction": torch.tensor(preds)}
+        print(f"Test result: total samples: {total_num}, Avg loss: {test_stat['loss']:.3f}, Accuracy: {100*test_stat['accuracy']:.3f}%")
         # ----------- <Your code> ---------------
         # dictionary should include loss, accuracy and prediction
         assert "loss" and "accuracy" and "prediction" in test_stat.keys()
@@ -39,12 +40,12 @@ class modelTrainer():
             train_output = self.model(images)
             loss = self.model.loss_function(train_output, targets)
             loss.backward()
-            self.optimizer.step()
+            self.model.optimizer.step()
             train_loss.append(loss.item())
 
-            if (batch_idx - last_print_batch_idx > (len(self.train_loader) / 9)):
+            if (batch_idx - last_print_batch_idx > (len(self.train_loader) / 20)):
                 last_print_batch_idx = batch_idx
-                print(f'Current Epoch: [{batch_idx*len(images)}/{len(self.train_loader.dataset)}] Loss: {loss.item():.3f}')
+                print(f'Current Epoch: Progress: [{batch_idx*len(images)}/{len(self.train_loader.dataset)}], Current Loss: {loss.item():.3f}')
 
 
         # ----------- <End Your code> ---------------
