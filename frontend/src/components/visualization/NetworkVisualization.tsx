@@ -5,6 +5,7 @@ import { Block, Connection } from '../../types/block';
 import { useStore } from '../../store/useStore';
 import { traceNetworkPath, deriveNetworkSizes, countNetworks } from './networkUtils';
 import NeuronView from './NeuronView';
+import TestResultsView from './TestResultsView';
 
 // Component to visualize blocks as they are currently arranged
 const BlocksView: React.FC = () => {
@@ -229,9 +230,9 @@ const NetworkVisualization: React.FC = () => {
   const networkCount = useMemo(() => countNetworks(blocks, connections), [blocks, connections]);
   
   return (
-    <div className={viewMode === 'neurons' ? 'h-full' : 'p-4 border rounded-md bg-white'}>
+    <div className={viewMode === 'neurons' || viewMode === 'testResults' ? 'h-full' : 'p-4 border rounded-md bg-white'}>
       {/* Multiple networks warning */}
-      {blocks.length > 0 && networkCount > 1 && viewMode !== 'neurons' && (
+      {blocks.length > 0 && networkCount > 1 && viewMode !== 'neurons' && viewMode !== 'testResults' && (
         <div className="mb-4 p-3 bg-yellow-100 text-yellow-800 rounded-md">
           <p className="font-semibold">Multiple Networks Detected</p>
           <p className="text-sm">
@@ -244,6 +245,7 @@ const NetworkVisualization: React.FC = () => {
       {viewMode === 'blocks' && <BlocksView />}
       {viewMode === 'layers' && <LayersView />}
       {viewMode === 'neurons' && <NeuronView blocks={blocks} connections={connections} />}
+      {viewMode === 'testResults' && <TestResultsView />}
     </div>
   );
 };
