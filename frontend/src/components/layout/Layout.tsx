@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { MainCanvas } from './MainCanvas';
-import { PropertyPanel } from '../graph/PropertyPanel';
+import { PropertyPanel } from './PropertyPanel';
 import { useStore } from '../../store/useStore';
 import type { Node } from 'reactflow';
 
@@ -27,7 +27,7 @@ export const Layout = () => {
           <MainCanvas onNodeSelect={handleNodeSelect} />
         </div>
         
-        {/* Only show property panel in blocks view when a node is selected */}
+        {/* Only show property panel in blocks view */}
         {viewMode === 'blocks' && <PropertyPanel selectedNode={selectedNode} />}
       </div>
     </div>
