@@ -48,7 +48,7 @@ run_source = []
 #retrieve code from PrimaryModel.py
 run_filename = "backend/local/run_main.py"
 with open(run_filename, "r") as run_file:
-    run_strs = run_file.readlines()[15:]
+    run_strs = run_file.readlines()[16:]
     for line in run_strs:
         run_source.append(line)
 run_entry["source"] = run_source
@@ -93,5 +93,5 @@ main_entry["nbformat"] = 4
 main_entry["nbformat_minor"] = 0
 
 gen_str = json.dumps(main_entry)
-with open(nb_filename, "w+") as nb_file:
+with open(nb_filename, "w") as nb_file:
     nb_file.write(gen_str)

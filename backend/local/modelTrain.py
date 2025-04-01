@@ -17,15 +17,16 @@ class modelTrainer():
                 test_output = self.model(images.to(device))
                 test_loss += self.model.loss_function(test_output, targets.to(device)).item()
                 pred = test_output.data.max(1, keepdim=True)[1]
-                num_correct += pred.eq(targets.to(device).data.view_as(pred)).sum()
+                num_correct += pred.eq(targets.to(device).data.view_as(pred)).sum().item()
                 preds += pred
         test_stat = {"loss": test_loss / num_batches, "accuracy": num_correct / total_num, "prediction": torch.tensor(preds)}
-        print(f"Test result: total samples: {total_num}, Avg loss: {test_stat['loss']:.3f}, Accuracy: {100*test_stat['accuracy']:.3f}%")
+        # print(f"Test result: total samples: {total_num}, Avg loss: {test_stat['loss']:.3f}, Accuracy: {100*test_stat['accuracy']:.3f}%")
         return test_stat
     
-    def train(self, device):
+    def train(self, device, epoch, divs=10):
         self.model.train()
         train_loss = []
+        train_acc = []
         last_print_batch_idx = 0
         for batch_idx, (images, targets) in enumerate(self.train_loader):
             images = images.to(device)
@@ -35,10 +36,16 @@ class modelTrainer():
             loss = self.model.loss_function(train_output, targets)
             loss.backward()
             self.model.optimizer.step()
-            train_loss.append(loss.item())
+            # train_loss.append(loss.item())
 
-            if (batch_idx - last_print_batch_idx > (len(self.train_loader) / 20)):
+            if (batch_idx - last_print_batch_idx > (len(self.train_loader) / divs)):
                 last_print_batch_idx = batch_idx
-                print(f'Current Epoch: Progress: [{batch_idx*len(images)}/{len(self.train_loader.dataset)}], Current Loss: {loss.item():.3f}')
+                curr_progress = epoch + (batch_idx*len(images)) / (len(self.train_loader.dataset))
+                test_stat = self.test(device=device)
+                curr_loss = test_stat["loss"]
+                curr_acc = test_stat["accuracy"]
+                train_loss.append((curr_progress, curr_loss))
+                train_acc.append((curr_progress, curr_acc))
+                # print(f'Current Epoch: Progress: [{batch_idx*len(images)}/{len(self.train_loader.dataset)}], Current Loss: {loss.item():.3f}')
 
-        return train_loss
+        return train_loss, train_acc
