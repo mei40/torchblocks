@@ -326,21 +326,22 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-
+  
       if (!reactFlowInstance) return;
-
+  
       const type = event.dataTransfer.getData('application/reactflow');
       if (!type) return;
-
+  
       const bounds = event.currentTarget.getBoundingClientRect();
       const position = reactFlowInstance.project({
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
       });
-
+  
       // Create a new node with parameters based on type
       let nodeData: any = { label: `${type} node` };
       
+      // Handle Special blocks
       if (type === 'input') {
         nodeData = {
           label: 'Input',
@@ -357,11 +358,12 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
             neurons: 1
           }
         };
-      } else if (type === 'linear') {
+      } 
+      
+      // Handle Layer blocks
+      else if (type === 'linear') {
         nodeData = {
           label: 'Linear Layer',
-          in_features: 784,
-          out_features: 128,
           parameters: {
             in_features: 784,
             out_features: 128,
@@ -371,8 +373,6 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
       } else if (type === 'conv2d') {
         nodeData = {
           label: 'Conv2D Layer',
-          channels: 64,
-          kernel_size: 3,
           parameters: {
             in_channels: 3,
             out_channels: 64,
@@ -381,7 +381,28 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
             padding: 1
           }
         };
-      } else if (type === 'relu') {
+      } else if (type === 'view') {
+        nodeData = {
+          label: 'View Layer',
+          parameters: {
+            out_shape: '[batch_size, -1]'
+          },
+          transformation: 'Reshape tensor'
+        };
+      } else if (type === 'max_pool2d') {
+        nodeData = {
+          label: 'MaxPool2D Layer',
+          parameters: {
+            kernel_size: 2,
+            stride: 2,
+            padding: 0
+          },
+          transformation: 'Pooling operation'
+        };
+      }
+      
+      // Handle Activation blocks
+      else if (type === 'relu') {
         nodeData = {
           label: 'ReLU Activation',
           parameters: {
@@ -389,15 +410,92 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
           },
           transformation: 'max(0, x)'
         };
+      } else if (type === 'sigmoid') {
+        nodeData = {
+          label: 'Sigmoid Activation',
+          parameters: {},
+          transformation: '1 / (1 + exp(-x))'
+        };
+      } else if (type === 'tanh') {
+        nodeData = {
+          label: 'Tanh Activation',
+          parameters: {},
+          transformation: 'tanh(x)'
+        };
+      } else if (type === 'log_softmax') {
+        nodeData = {
+          label: 'LogSoftmax Activation',
+          parameters: {
+            dim: 1
+          },
+          transformation: 'log(softmax(x))'
+        };
       }
-
+      
+      // Handle Loss Function blocks
+      else if (type === 'crossentropyloss') {
+        nodeData = {
+          label: 'CrossEntropyLoss',
+          parameters: {
+            reduction: 'mean'
+          },
+          category: 'Loss Functions'
+        };
+      } else if (type === 'mseloss') {
+        nodeData = {
+          label: 'MSELoss',
+          parameters: {
+            reduction: 'mean'
+          },
+          category: 'Loss Functions'
+        };
+      }
+      
+      // Handle Optimizer blocks
+      else if (type === 'adam') {
+        nodeData = {
+          label: 'Adam Optimizer',
+          parameters: {
+            learning_rate: 0.001,
+            betas: [0.9, 0.999],
+            eps: 1e-8,
+            weight_decay: 0
+          },
+          category: 'Optimizers'
+        };
+      } else if (type === 'sgd') {
+        nodeData = {
+          label: 'SGD Optimizer',
+          parameters: {
+            learning_rate: 0.001,
+            momentum: 0,
+            dampening: 0,
+            weight_decay: 0,
+            nesterov: false
+          },
+          category: 'Optimizers'
+        };
+      }
+      
+      // Handle Dataset blocks
+      else if (type === 'mnist') {
+        nodeData = {
+          label: 'MNIST Dataset',
+          parameters: {
+            batch_size: 64,
+            shuffle: true
+          },
+          category: 'Datasets'
+        };
+      }
+  
       const newNode = {
         id: `${type}-${Date.now()}`,
         type,
         position,
         data: nodeData,
       };
-
+  
       setNodes((nds) => nds.concat(newNode));
       
       // Update the Zustand store with the new block
