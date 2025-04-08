@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { Block, Connection } from '../types/block';
 
 // Define view mode types
-export type ViewMode = 'blocks' | 'layers' | 'neurons' | 'testResults';
+export type ViewMode = 'blocks' | 'layers' | 'neurons' | 'testResults' | 'codeVisualizer';
 
 interface BlockState {
   // Original state

@@ -24,6 +24,7 @@ import { useStore } from '../../store/useStore';
 import ViewToggle from '../visualization/ViewToggle';
 import NetworkVisualization from '../visualization/NetworkVisualization';
 import { nodeTypes } from '../nodes/NodeTypes';
+import CodeVisualizer from '../visualization/CodeVisualizer';
 
 // Custom edge component with a much larger hit area and better click detection
 const CustomEdge = ({ 
@@ -751,11 +752,21 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
               </div>
             </Panel>
           </ReactFlow>
-        ) : (
+        ) : viewMode === 'layers' ? (
           <div className="w-full h-full overflow-auto p-4">
             <NetworkVisualization />
           </div>
-        )}
+        ) : viewMode === 'neurons' ? (
+          <div className="w-full h-full overflow-auto p-4">
+            <NetworkVisualization />
+          </div>
+        ) : viewMode === 'testResults' ? (
+          <div className="w-full h-full overflow-auto p-4">
+            <NetworkVisualization />
+          </div>
+        ) : viewMode === 'codeVisualizer' ? (
+          <CodeVisualizer />
+        ) : null}
       </div>
     </div>
   );
