@@ -3,7 +3,7 @@
 import React from 'react';
 import { useStore } from '../../store/useStore';
 
-export type ViewMode = 'blocks' | 'layers' | 'neurons' | 'testResults';
+export type ViewMode = 'blocks' | 'layers' | 'neurons' | 'testResults' | 'codeVisualizer';
 
 const ViewToggle: React.FC = () => {
   const { viewMode, setViewMode } = useStore();
@@ -49,6 +49,16 @@ const ViewToggle: React.FC = () => {
         }`}
       >
         Test Results
+      </button>
+      <button
+        onClick={() => setViewMode('codeVisualizer')}
+        className={`px-4 py-2 rounded ${
+          viewMode === 'codeVisualizer'
+            ? 'bg-blue-500 text-white'
+            : 'bg-gray-100 hover:bg-gray-200'
+        }`}
+      >
+        Code Visualizer
       </button>
     </div>
   );
