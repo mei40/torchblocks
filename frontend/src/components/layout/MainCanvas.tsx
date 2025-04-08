@@ -18,6 +18,8 @@ import ReactFlow, {
   NodeDragHandler,
   ConnectionLineType,
   EdgeMouseHandler,
+  NodeChange,
+  applyNodeChanges,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useStore } from '../../store/useStore';
@@ -164,8 +166,10 @@ interface MainCanvasProps {
 }
 
 export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
-  const { viewMode, addBlock, updateBlock, addConnection, removeConnection } = useStore(state => ({
+  const { viewMode, blocks, connections, addBlock, updateBlock, addConnection, removeConnection } = useStore(state => ({
     viewMode: state.viewMode,
+    blocks: state.blocks,
+    connections: state.connections,
     addBlock: state.addBlock,
     updateBlock: state.updateBlock,
     addConnection: state.addConnection,
@@ -181,6 +185,22 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  
+  // Custom node changes handler to sync position changes to Zustand store
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    // First, apply changes to the ReactFlow nodes state
+    onNodesChange(changes);
+    
+    // Then update positions in Zustand store for any position changes
+    changes.forEach(change => {
+      if (change.type === 'position' && change.position && change.id) {
+        // Update the block position in the Zustand store
+        updateBlock(change.id, {
+          position: change.position
+        });
+      }
+    });
+  }, [onNodesChange, updateBlock]);
 
   // Helper function to validate connections
   const validateConnection = (connection: Connection): boolean => {
@@ -580,12 +600,17 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
         edgesToRemove.forEach(edge => {
           useStore.getState().removeConnection(edge.id);
         });
+      } else {
+        // If not dropped on trash, update the position in the store
+        updateBlock(node.id, {
+          position: node.position
+        });
       }
     }
 
     setIsTrashActive(false);
     draggedNode.current = null;
-  }, [setNodes, setEdges, edges]);
+  }, [setNodes, setEdges, edges, updateBlock]);
 
   // Key press handler for deleting selected edges with the Delete key
   useEffect(() => {
@@ -601,40 +626,38 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
     };
   }, [selectedEdgeId, handleEdgeDelete]);
 
-  // Sync from zustand to ReactFlow (in case we need to load existing model)
+  // Sync from zustand to ReactFlow whenever blocks change
   useEffect(() => {
-    const { blocks, connections } = useStore.getState();
+    // Convert blocks to ReactFlow nodes, preserving positions
+    const reactFlowNodes = blocks.map(block => ({
+      id: block.id,
+      type: block.type,
+      position: block.position,
+      data: block.data
+    }));
     
-    if (blocks.length > 0 && nodes.length === 0) {
-      // Convert blocks to ReactFlow nodes
-      const reactFlowNodes = blocks.map(block => ({
-        id: block.id,
-        type: block.type,
-        position: block.position,
-        data: block.data
-      }));
-      
-      setNodes(reactFlowNodes);
-    }
+    // Use setNodes directly to avoid triggering the onNodesChange handler
+    setNodes(reactFlowNodes);
+  }, [blocks, setNodes]);
+
+  // Sync from zustand to ReactFlow whenever connections change
+  useEffect(() => {
+    // Convert connections to ReactFlow edges
+    const reactFlowEdges = connections.map(connection => ({
+      id: connection.id,
+      source: connection.source,
+      target: connection.target,
+      sourceHandle: connection.sourceHandle,
+      targetHandle: connection.targetHandle,
+      ...edgeOptions,
+      data: { 
+        onSelect: handleEdgeSelect,
+        onDelete: handleEdgeDelete 
+      }
+    }));
     
-    if (connections.length > 0 && edges.length === 0) {
-      // Convert connections to ReactFlow edges
-      const reactFlowEdges = connections.map(connection => ({
-        id: connection.id,
-        source: connection.source,
-        target: connection.target,
-        sourceHandle: connection.sourceHandle,
-        targetHandle: connection.targetHandle,
-        ...edgeOptions,
-        data: { 
-          onSelect: handleEdgeSelect,
-          onDelete: handleEdgeDelete 
-        }
-      }));
-      
-      setEdges(reactFlowEdges);
-    }
-  }, [setNodes, setEdges, nodes.length, edges.length, handleEdgeDelete, handleEdgeSelect]);
+    setEdges(reactFlowEdges);
+  }, [connections, setEdges, handleEdgeDelete, handleEdgeSelect]);
 
   // Update existing edges with the delete handler when it changes
   useEffect(() => {
@@ -673,7 +696,7 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
+            onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onEdgesDelete={onEdgesDelete}
             onConnect={onConnect}

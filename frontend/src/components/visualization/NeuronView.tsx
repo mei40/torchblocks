@@ -41,20 +41,22 @@ const getRandomBias = (seed: number): number => {
 const NeuronPropertyPanel: React.FC<{ neuronInfo: NeuronInfo | null }> = ({ neuronInfo }) => {
   if (!neuronInfo) {
     return (
-      <div className="w-64 border-l border-gray-200 bg-white p-4">
-        <h2 className="text-lg font-semibold mb-4">Neuron Properties</h2>
-        <div className="text-sm text-gray-500">
-          Select a neuron to view its properties. Once a neuron is clicked, this panel will 
-          show all details for the specific neuron.
+      <div className="w-full h-full bg-white border-l border-gray-200 overflow-y-auto">
+        <div className="p-4">
+          <h2 className="text-lg font-semibold mb-4">Neuron Properties</h2>
+          <div className="text-sm text-gray-500">
+            Select a neuron to view its properties. Once a neuron is clicked, this panel will 
+            show all details for the specific neuron.
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-64 border-l border-gray-200 bg-white overflow-y-auto">
+    <div className="w-full h-full bg-white border-l border-gray-200 overflow-y-auto">
       <div className="p-4">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center mb-2">
           <h2 className="text-lg font-semibold">Neuron Properties</h2>
           
           {/* Layer badge */}
@@ -70,18 +72,18 @@ const NeuronPropertyPanel: React.FC<{ neuronInfo: NeuronInfo | null }> = ({ neur
         </div>
         
         <div className="mb-4">
-          <h3 className="text-md font-medium mb-2">
+          <h3 className="text-md font-medium">
             {neuronInfo.layerType === 'input' ? 'Input' : 
              neuronInfo.layerType === 'hidden' ? `Hidden Layer ${neuronInfo.layerIndex}` : 
              'Output'} Neuron {neuronInfo.neuronIndex + 1}
           </h3>
         </div>
-        
+
         {neuronInfo.layerType !== 'input' && (
           <div className="space-y-4">
             <div className="border-t border-gray-200 pt-4">
               <h4 className="text-sm font-semibold mb-2">Weights</h4>
-              <div className="space-y-1 max-h-40 overflow-y-auto">
+              <div className="space-y-1 max-h-40 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
                 {neuronInfo.weights.slice(0, 8).map((weight, i) => (
                   <div 
                     key={`weight-${i}`} 
@@ -179,6 +181,7 @@ const NeuronPropertyPanel: React.FC<{ neuronInfo: NeuronInfo | null }> = ({ neur
   );
 };
 
+// Main NeuronView Component
 const NeuronView: React.FC<NeuronViewProps> = ({ blocks, connections }) => {
   // State for selected neuron
   const [selectedNeuron, setSelectedNeuron] = useState<NeuronInfo | null>(null);
@@ -189,7 +192,11 @@ const NeuronView: React.FC<NeuronViewProps> = ({ blocks, connections }) => {
         <div className="flex-1 flex items-center justify-center h-64 text-gray-500">
           No connected layers detected. Create a network structure first.
         </div>
-        <NeuronPropertyPanel neuronInfo={null} />
+        <div className="w-64 h-full relative">
+          <div className="absolute inset-0">
+            <NeuronPropertyPanel neuronInfo={null} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -228,9 +235,6 @@ const NeuronView: React.FC<NeuronViewProps> = ({ blocks, connections }) => {
   const handleNeuronClick = useCallback((layerType: string, layerIndex: number, neuronIndex: number, prevLayerSize: number) => {
     const neuronInfo = createNeuronInfo(layerType, layerIndex, neuronIndex, prevLayerSize);
     setSelectedNeuron(neuronInfo);
-    
-    // Add to console for debugging
-    console.log("Selected neuron:", neuronInfo);
   }, [createNeuronInfo]);
 
   return (
@@ -402,8 +406,12 @@ const NeuronView: React.FC<NeuronViewProps> = ({ blocks, connections }) => {
         </div>
       </div>
       
-      {/* Properties Panel on the right */}
-      <NeuronPropertyPanel neuronInfo={selectedNeuron} />
+      {/* Properties Panel on the right - Fixed width with visible scrollbar */}
+      <div className="w-64 flex-none h-full relative">
+        <div className="absolute inset-0">
+          <NeuronPropertyPanel neuronInfo={selectedNeuron} />
+        </div>
+      </div>
     </div>
   );
 };
