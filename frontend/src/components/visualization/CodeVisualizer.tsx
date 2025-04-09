@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Info, BookOpen, Code, ChevronRight } from 'lucide-react';
@@ -50,37 +50,10 @@ const libraryDocs: Record<string, LibraryDoc> = {
   }
 };
 
-// Sample Python code for demonstration
-const sampleCode = `import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-class NeuralNetwork(nn.Module):
-    def __init__(self):
-        super(NeuralNetwork, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, 3, 1)
-        self.conv2 = nn.Conv2d(32, 64, 3, 1)
-        self.dropout1 = nn.Dropout(0.25)
-        self.dropout2 = nn.Dropout(0.5)
-        self.fc1 = nn.Linear(9216, 128)
-        self.fc2 = nn.Linear(128, 10)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = F.max_pool2d(x, 2)
-        x = self.dropout1(x)
-        x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.dropout2(x)
-        x = self.fc2(x)
-        output = F.log_softmax(x, dim=1)
-        return output`;
-
 const CodeVisualizer: React.FC = () => {
+  const [modelCode, setModelCode] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
   const [fontSize, setFontSize] = useState(14);
   const [isDarkTheme, setIsDarkTheme] = useState(true);
@@ -119,12 +92,34 @@ const CodeVisualizer: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const fetchCode = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch('/api/get-model-code');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        setModelCode(data.code);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to fetch model code');
+        console.error('Fetch error:', e);
+      }
+      setIsLoading(false);
+    };
+
+    fetchCode();
+  }, []);
+
   const renderLibraryDocs = () => {
     if (!selectedLibrary || !showDocs) return null;
     const lib = libraryDocs[selectedLibrary];
     
     return (
-      <div className="absolute right-0 top-0 h-full w-80 bg-gray-800 border-l border-gray-700 p-4 overflow-y-auto">
+      <div className="absolute right-0 top-0 h-full w-80 bg-gray-800 border-l border-gray-700 p-4 overflow-y-auto z-10">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">{lib.name}</h3>
           <button 
@@ -191,7 +186,7 @@ const CodeVisualizer: React.FC = () => {
     if (!selectedElement) return null;
     
     return (
-      <div className="absolute left-0 bottom-0 w-full bg-gray-800 border-t border-gray-700 p-4">
+      <div className="absolute left-0 bottom-0 w-full bg-gray-800 border-t border-gray-700 p-4 z-10">
         <div className="flex justify-between items-center">
           <div>
             <span className="text-gray-400 text-sm">Line {selectedElement.line}:</span>
@@ -254,7 +249,12 @@ const CodeVisualizer: React.FC = () => {
           </select>
         </div>
         <button
-          onClick={() => setShowDocs(!showDocs)}
+          onClick={() => {
+            if (!showDocs && !selectedLibrary) {
+              setSelectedLibrary('torch');
+            }
+            setShowDocs(!showDocs);
+          }}
           className={`ml-auto flex items-center space-x-2 ${isDarkTheme ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-500 hover:bg-blue-600'} px-3 py-1 rounded text-sm`}
         >
           <Info className="w-4 h-4" />
@@ -264,42 +264,46 @@ const CodeVisualizer: React.FC = () => {
 
       {/* Code Display */}
       <div className="flex-1 overflow-auto p-4 relative">
-        <div className="relative">
-          <SyntaxHighlighter
-            language="python"
-            style={isDarkTheme ? vscDarkPlus : vs}
-            showLineNumbers={showLineNumbers}
-            customStyle={{
-              fontSize: `${fontSize}px`,
-              backgroundColor: isDarkTheme ? '#1a1a1a' : '#f5f5f5',
-              padding: '1rem',
-              borderRadius: '0.5rem',
-              margin: 0,
-            }}
-            lineProps={(lineNumber) => ({
-              style: {
-                display: 'block',
-                backgroundColor: hoveredLine === lineNumber ? (isDarkTheme ? '#2a2a2a' : '#e5e5e5') : 'transparent',
-                cursor: 'pointer',
-              },
-              onMouseEnter: () => handleLineHover(lineNumber),
-              onMouseLeave: handleLineLeave,
-              onClick: () => handleCodeClick(lineNumber, sampleCode.split('\n')[lineNumber - 1]),
-            })}
-          >
-            {sampleCode}
-          </SyntaxHighlighter>
-          
-          {/* Hover Info Panel */}
-          {hoveredLine !== null && (
-            <div className={`absolute right-4 top-4 ${isDarkTheme ? 'bg-gray-800' : 'bg-gray-100'} p-2 rounded shadow-lg text-sm`}>
-              <div className={isDarkTheme ? 'text-gray-400' : 'text-gray-600'}>Line {hoveredLine}</div>
-              <div className={isDarkTheme ? 'text-white' : 'text-gray-900'} style={{ marginTop: '0.25rem' }}>
-                {sampleCode.split('\n')[hoveredLine - 1]?.trim()}
+        {isLoading && <div className="text-center p-4">Loading code...</div>}
+        {error && <div className="text-center p-4 text-red-500">Error: {error}</div>}
+        {modelCode && (
+          <div className="relative">
+            <SyntaxHighlighter
+              language="python"
+              style={isDarkTheme ? vscDarkPlus : vs}
+              showLineNumbers={showLineNumbers}
+              customStyle={{
+                fontSize: `${fontSize}px`,
+                backgroundColor: isDarkTheme ? '#1a1a1a' : '#f5f5f5',
+                padding: '1rem',
+                borderRadius: '0.5rem',
+                margin: 0,
+              }}
+              lineProps={(lineNumber) => ({
+                style: {
+                  display: 'block',
+                  backgroundColor: hoveredLine === lineNumber ? (isDarkTheme ? '#2a2a2a' : '#e5e5e5') : 'transparent',
+                  cursor: 'pointer',
+                },
+                onMouseEnter: () => handleLineHover(lineNumber),
+                onMouseLeave: handleLineLeave,
+                onClick: () => handleCodeClick(lineNumber, modelCode.split('\n')[lineNumber - 1]),
+              })}
+            >
+              {modelCode}
+            </SyntaxHighlighter>
+            
+            {/* Hover Info Panel */}
+            {hoveredLine !== null && modelCode && (
+              <div className={`absolute right-4 top-4 ${isDarkTheme ? 'bg-gray-800' : 'bg-gray-100'} p-2 rounded shadow-lg text-sm z-10`}>
+                <div className={isDarkTheme ? 'text-gray-400' : 'text-gray-600'}>Line {hoveredLine}</div>
+                <div className={isDarkTheme ? 'text-white' : 'text-gray-900'} style={{ marginTop: '0.25rem' }}>
+                  {modelCode.split('\n')[hoveredLine - 1]?.trim()}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
         {renderLibraryDocs()}
         {renderElementInfo()}
       </div>
@@ -308,7 +312,7 @@ const CodeVisualizer: React.FC = () => {
       <div className={`p-2 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'} text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
         <div className="flex justify-between">
           <span>Python</span>
-          <span>{sampleCode.split('\n').length} lines</span>
+          {modelCode && <span>{modelCode.split('\n').length} lines</span>}
         </div>
       </div>
     </div>
