@@ -35,7 +35,7 @@ OAUTH2_SCOPE = "https://www.googleapis.com/auth/drive.file"
 # Location of the client secrets.
 # This was generated from Brandon Mei's Google Account. 
 # Please contact him (brandonymei@gmail.com) for any inquiries. 
-CLIENT_SECRETS = "backend/google/client_secrets.json"
+CLIENT_SECRETS = "backend/google/build/client_secrets.json"
 
 # Path to the file to upload.
 FILENAME = sys.argv[1]

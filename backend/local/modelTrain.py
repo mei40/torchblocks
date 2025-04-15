@@ -12,6 +12,7 @@ class modelTrainer():
         total_num = len(self.test_loader.dataset)
         num_batches = len(self.test_loader)
         preds = []
+        self.model = self.model.to(device)
         with torch.no_grad():
             for images, targets in self.test_loader:
                 test_output = self.model(images.to(device))
@@ -25,6 +26,7 @@ class modelTrainer():
     
     def train(self, device, epoch, divs=10):
         self.model.train()
+        self.model = self.model.to(device)
         train_loss = []
         train_acc = []
         last_print_batch_idx = 0
