@@ -118,13 +118,13 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode }) =>
       }
     }
 
-    // Create updated node data
+    // Create updated node data with all the necessary properties
     const updatedData = {
       ...selectedNode.data,
       parameters: { ...finalParams }
     };
     
-    // Copy parameters to direct properties
+    // IMPORTANT: Copy parameters to direct properties for proper display in nodes
     if (selectedNode.type === 'linear') {
       updatedData.in_features = finalParams.in_features;
       updatedData.out_features = finalParams.out_features;
@@ -161,17 +161,14 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode }) =>
       updatedData.reduction = finalParams.reduction;
     }
     
-    // Add a render key to force a re-render in React
+    // Force ReactFlow to re-render by adding a unique key
     updatedData._renderKey = Date.now();
     
-    // Create a block update object with a slightly different position to force ReactFlow to update
+    // Create a block update object - IMPORTANT: Don't modify the position
     const updatedBlock: Partial<Block> = {
       id: selectedNode.id,
       data: updatedData,
-      position: {
-        x: selectedNode.position.x + 0.001,  // Force position update to trigger re-render
-        y: selectedNode.position.y
-      }
+      // DO NOT include position here to avoid resetting the position
     };
     
     // Update the block in the store
@@ -639,6 +636,11 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode }) =>
           <div className="bg-gray-100 p-3 rounded-md mb-4">
             <h3 className="text-md font-medium">{selectedNode.data.label}</h3>
             <p className="text-xs text-gray-500 mt-1">Type: {selectedNode.type}</p>
+            {selectedNode.position && (
+              <p className="text-xs text-gray-500 mt-1">
+                Position: x: {Math.round(selectedNode.position.x)}, y: {Math.round(selectedNode.position.y)}
+              </p>
+            )}
           </div>
         )}
         

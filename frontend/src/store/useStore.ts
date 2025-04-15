@@ -49,11 +49,11 @@ export const useStore = create<BlockState>((set) => ({
       blocks: state.blocks.map((block) => {
         if (block.id !== id) return block;
         
-        // Create a new block with the updated data
+        // Create a new block with the updated data, preserving the position
         const updatedBlock: Block = {
           id,
           type: block.type, // Keep original type to ensure it's defined
-          position: updatedData.position || block.position,
+          position: updatedData.position || block.position, // Preserve position if not explicitly changed
           data: {
             ...block.data,
             ...(updatedData.data || {})
