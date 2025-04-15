@@ -1,0 +1,163 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Welcome to Google Colab!\n",
+    "\n",
+    "## To run your TorchBlocks code:\n",
+    "\n",
+    "Simply press Ctrl-F9 and your model will begin training. \n",
+    "\n",
+    "Your execution results should be available in the TorchBlocks window shortly after training begins. \n",
+    "\n",
+    "## To train faster:\n",
+    "\n",
+    "More powerful GPUs can be accessed via the \"Connect\" tab in the top right corner of Colab.\n",
+    "\n",
+    "Please note that without a Colab Pro subscription or purchased compute units, some GPUs may be unavailable or disconnect randomly. "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from google.colab import drive\n",
+    "drive.mount('/content/drive')\n",
+    "out_filename = \"/content/drive/MyDrive/TorchBlocks/output_results.json\""
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 0,
+   "metadata": {
+    "id": "123456781234"
+   },
+   "outputs": [],
+   "source": [
+    "# APPEND MODEL RESULTS HERE"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 0,
+   "metadata": {
+    "id": "876543218765"
+   },
+   "outputs": [],
+   "source": [
+    "class modelTrainer():\n",
+    "    def __init__(self, p_model):\n",
+    "        self.model = p_model\n",
+    "        self.train_loader = torch.utils.data.DataLoader(p_model.train_dataset, batch_size=64, shuffle=True)\n",
+    "        self.test_loader = torch.utils.data.DataLoader(p_model.train_dataset, batch_size=1000, shuffle=False)\n",
+    "    \n",
+    "    def test(self, device):\n",
+    "        test_loss = 0\n",
+    "        num_correct = 0\n",
+    "        total_num = len(self.test_loader.dataset)\n",
+    "        num_batches = len(self.test_loader)\n",
+    "        preds = []\n",
+    "        self.model = self.model.to(device)\n",
+    "        with torch.no_grad():\n",
+    "            for images, targets in self.test_loader:\n",
+    "                test_output = self.model(images.to(device))\n",
+    "                test_loss += self.model.loss_function(test_output, targets.to(device)).item()\n",
+    "                pred = test_output.data.max(1, keepdim=True)[1]\n",
+    "                num_correct += pred.eq(targets.to(device).data.view_as(pred)).sum().item()\n",
+    "                preds += pred\n",
+    "        test_stat = {\"loss\": test_loss / num_batches, \"accuracy\": num_correct / total_num, \"prediction\": torch.tensor(preds)}\n",
+    "        # print(f\"Test result: total samples: {total_num}, Avg loss: {test_stat['loss']:.3f}, Accuracy: {100*test_stat['accuracy']:.3f}%\")\n",
+    "        return test_stat\n",
+    "    \n",
+    "    def train(self, device, epoch, divs=10):\n",
+    "        self.model.train()\n",
+    "        self.model = self.model.to(device)\n",
+    "        train_loss = []\n",
+    "        train_acc = []\n",
+    "        last_print_batch_idx = 0\n",
+    "        for batch_idx, (images, targets) in enumerate(self.train_loader):\n",
+    "            images = images.to(device)\n",
+    "            targets = targets.to(device)\n",
+    "            self.model.optimizer.zero_grad()\n",
+    "            train_output = self.model(images)\n",
+    "            loss = self.model.loss_function(train_output, targets)\n",
+    "            loss.backward()\n",
+    "            self.model.optimizer.step()\n",
+    "            # train_loss.append(loss.item())\n",
+    "\n",
+    "            if (batch_idx - last_print_batch_idx > (len(self.train_loader) / divs)):\n",
+    "                last_print_batch_idx = batch_idx\n",
+    "                curr_progress = epoch + (batch_idx*len(images)) / (len(self.train_loader.dataset))\n",
+    "                test_stat = self.test(device=device)\n",
+    "                curr_loss = test_stat[\"loss\"]\n",
+    "                curr_acc = test_stat[\"accuracy\"]\n",
+    "                train_loss.append((curr_progress, curr_loss))\n",
+    "                train_acc.append((curr_progress, curr_acc))\n",
+    "                # print(f'Current Epoch: Progress: [{batch_idx*len(images)}/{len(self.train_loader.dataset)}], Current Loss: {loss.item():.3f}')\n",
+    "\n",
+    "        return train_loss, train_acc"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 0,
+   "metadata": {
+    "id": "727072707270"
+   },
+   "outputs": [],
+   "source": [
+    "import json\n",
+    "if __name__ == \"__main__\":\n",
+    "    curr_model = PrimaryModel()\n",
+    "    trainer = modelTrainer(curr_model)\n",
+    "    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')\n",
+    "    loss = []\n",
+    "    accs = []\n",
+    "    for epoch in range(3):\n",
+    "        train_loss, train_acc = trainer.train(device, epoch)\n",
+    "        test_result = trainer.test(device)\n",
+    "        loss += train_loss\n",
+    "        accs += train_acc\n",
+    "        loss.append((float(epoch+1), test_result[\"loss\"]))\n",
+    "        accs.append((float(epoch+1), test_result[\"accuracy\"]))\n",
+    "        with open(out_filename, \"w+\") as outfile:\n",
+    "            jsondict = {\"losses\": loss, \"accuracies\": accs}\n",
+    "            outfile.write(json.dumps(jsondict, indent=4))"
+   ]
+  }
+ ],
+ "metadata": {
+  "accelerator": "GPU",
+  "colab": {
+   "gpuType": "T4",
+   "provenance": []
+  },
+  "kernelspec": {
+   "display_name": "Python 3",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.8.10"
+  },
+  "vscode": {
+   "interpreter": {
+    "hash": "b0fa6594d8f4cbf19f97940f81e996739fb7646882a419484c72d19e05852a7e"
+   }
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 0
+}
