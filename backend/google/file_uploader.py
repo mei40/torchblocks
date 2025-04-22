@@ -28,6 +28,7 @@ from googleapiclient.errors import HttpError
 import sys
 import time
 import json
+import io
 
 # OAuth 2.0 scope that will be authorized.
 # Check https://developers.google.com/drive/scopes for all available scopes.
@@ -39,6 +40,7 @@ OAUTH2_SCOPE = "https://www.googleapis.com/auth/drive.file"
 CLIENT_SECRETS = "backend/google/build/client_secrets.json"
 AUTHINFO_FILE = "backend/google/build/authinfo.json"
 AUTHINFO_SKELETON = "backend/google/SkeletonAuth.json"
+RESULTS_FILE = "backend/local/build/local_results.json"
 
 # Path to the file to upload.
 FILENAME = sys.argv[1]
@@ -130,6 +132,7 @@ try:
       drive_service.files().create(body=body, media_body=media_body).execute()
     )
     print(f"JSON File ID: {new_file.get('id')}")
+    json_file_id = new_file.get("id")
 
 except HttpError as error:
   # TODO(developer) - Handle errors from drive API.
@@ -137,3 +140,13 @@ except HttpError as error:
 
 
 # Then, check for updated results.
+while True:
+    request = drive_service.files().get_media(fileId=json_file_id)
+    file = io.BytesIO()
+    downloader = googleapiclient.http.MediaIoBaseDownload(file, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    with open(RESULTS_FILE, "wb") as results_fp:
+        results_fp.write(file.getvalue())
+    time.sleep(5)
