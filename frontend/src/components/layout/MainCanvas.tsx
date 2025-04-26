@@ -362,22 +362,40 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
       // Create a new node with parameters based on type
       let nodeData: any = { label: `${type} node` };
       
-      // Handle Special blocks
+      // Handle Special blocks with embedded components
       if (type === 'input') {
+        // Input node now has embedded dataset with shape information
+        const isDatasetMnist = true; // Default to MNIST
         nodeData = {
           label: 'Input',
-          features: 3,
-          parameters: {
-            features: 3
-          }
+          dataset: {
+            type: 'mnist',
+            parameters: {},
+            // Add shape information
+            shape: {
+              channels: 1,
+              height: 28,
+              width: 28
+            }
+          },
+          parameters: {}
         };
-      } else if (type === 'output') {
+      } 
+      else if (type === 'output') {
+        // Output node now has embedded loss function and optimizer
         nodeData = {
           label: 'Output',
-          neurons: 1,
-          parameters: {
-            neurons: 1
-          }
+          lossFunction: {
+            type: 'crossentropyloss',
+            parameters: {}
+          },
+          optimizer: {
+            type: 'adam',
+            parameters: {
+              learning_rate: 0.001
+            }
+          },
+          parameters: {}
         };
       } 
       
@@ -388,10 +406,10 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
           parameters: {
             in_features: 784,
             out_features: 128,
-            bias: true
           }
         };
-      } else if (type === 'conv2d') {
+      } 
+      else if (type === 'conv2d') {
         nodeData = {
           label: 'Conv2D Layer',
           parameters: {
@@ -402,7 +420,8 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
             padding: 1
           }
         };
-      } else if (type === 'view') {
+      } 
+      else if (type === 'view') {
         nodeData = {
           label: 'View Layer',
           parameters: {
@@ -410,7 +429,8 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
           },
           transformation: 'Reshape tensor'
         };
-      } else if (type === 'max_pool2d') {
+      } 
+      else if (type === 'max_pool2d') {
         nodeData = {
           label: 'MaxPool2D Layer',
           parameters: {
@@ -426,87 +446,29 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
       else if (type === 'relu') {
         nodeData = {
           label: 'ReLU Activation',
-          parameters: {
-            inplace: true
-          },
+          parameters: {},
           transformation: 'max(0, x)'
         };
-      } else if (type === 'sigmoid') {
+      } 
+      else if (type === 'sigmoid') {
         nodeData = {
           label: 'Sigmoid Activation',
           parameters: {},
           transformation: '1 / (1 + exp(-x))'
         };
-      } else if (type === 'tanh') {
+      } 
+      else if (type === 'tanh') {
         nodeData = {
           label: 'Tanh Activation',
           parameters: {},
           transformation: 'tanh(x)'
         };
-      } else if (type === 'log_softmax') {
+      } 
+      else if (type === 'log_softmax') {
         nodeData = {
           label: 'LogSoftmax Activation',
-          parameters: {
-            dim: 1
-          },
+          parameters: {},
           transformation: 'log(softmax(x))'
-        };
-      }
-      
-      // Handle Loss Function blocks
-      else if (type === 'crossentropyloss') {
-        nodeData = {
-          label: 'CrossEntropyLoss',
-          parameters: {
-            reduction: 'mean'
-          },
-          category: 'Loss Functions'
-        };
-      } else if (type === 'mseloss') {
-        nodeData = {
-          label: 'MSELoss',
-          parameters: {
-            reduction: 'mean'
-          },
-          category: 'Loss Functions'
-        };
-      }
-      
-      // Handle Optimizer blocks
-      else if (type === 'adam') {
-        nodeData = {
-          label: 'Adam Optimizer',
-          parameters: {
-            learning_rate: 0.001,
-            betas: [0.9, 0.999],
-            eps: 1e-8,
-            weight_decay: 0
-          },
-          category: 'Optimizers'
-        };
-      } else if (type === 'sgd') {
-        nodeData = {
-          label: 'SGD Optimizer',
-          parameters: {
-            learning_rate: 0.001,
-            momentum: 0,
-            dampening: 0,
-            weight_decay: 0,
-            nesterov: false
-          },
-          category: 'Optimizers'
-        };
-      }
-      
-      // Handle Dataset blocks
-      else if (type === 'mnist') {
-        nodeData = {
-          label: 'MNIST Dataset',
-          parameters: {
-            batch_size: 64,
-            shuffle: true
-          },
-          category: 'Datasets'
         };
       }
   
@@ -529,7 +491,7 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
     },
     [reactFlowInstance, setNodes, addBlock]
   );
-
+  
   // Track drag and drop state
   const onDragStart = useCallback(() => {
     setIsDragging(true);

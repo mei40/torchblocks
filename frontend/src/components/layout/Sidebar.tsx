@@ -4,23 +4,15 @@ const componentsList = [
   // Special blocks
   {
     id: 'input',
-    name: 'Input',
+    name: 'Input Block',
     category: 'Special',
-    description: 'Input features',
+    description: 'Input with dataset',
   },
   {
     id: 'output',
-    name: 'Output',
+    name: 'Output Block',
     category: 'Special',
-    description: 'Output neurons',
-  },
-  
-  // Dataset blocks
-  {
-    id: 'mnist',
-    name: 'MNIST Dataset',
-    category: 'Datasets',
-    description: 'Handwritten digits dataset',
+    description: 'Output with loss and optimizer',
   },
   
   // Layer blocks
@@ -74,34 +66,6 @@ const componentsList = [
     category: 'Activations',
     description: 'Log of softmax function',
   },
-  
-  // Loss function blocks
-  {
-    id: 'crossentropyloss',
-    name: 'CrossEntropyLoss',
-    category: 'Loss Functions',
-    description: 'Cross entropy loss',
-  },
-  {
-    id: 'mseloss',
-    name: 'MSELoss',
-    category: 'Loss Functions',
-    description: 'Mean squared error loss',
-  },
-  
-  // Optimizer blocks
-  {
-    id: 'adam',
-    name: 'Adam',
-    category: 'Optimizers',
-    description: 'Adam optimizer',
-  },
-  {
-    id: 'sgd',
-    name: 'SGD',
-    category: 'Optimizers',
-    description: 'Stochastic gradient descent',
-  },
 ];
 
 export const Sidebar = () => {
@@ -133,10 +97,7 @@ export const Sidebar = () => {
                   key={component.id}
                   className={`p-3 border border-gray-200 rounded-md hover:bg-gray-50 cursor-move transition-colors ${
                     component.id === 'input' ? 'bg-gray-100' : 
-                    component.id === 'output' ? 'bg-green-50' : 
-                    component.category === 'Datasets' ? 'bg-purple-50' :
-                    component.category === 'Loss Functions' ? 'bg-orange-50' :
-                    component.category === 'Optimizers' ? 'bg-yellow-50' : ''
+                    component.id === 'output' ? 'bg-green-50' : ''
                   }`}
                   draggable
                   onDragStart={(e) => onDragStart(e, component.id)}
@@ -159,6 +120,15 @@ export const Sidebar = () => {
             <li>Switch views to see your model architecture</li>
             <li>Export your model to PyTorch code</li>
           </ol>
+        </div>
+        
+        <div className="mt-4 p-3 border border-gray-200 rounded-md bg-yellow-50">
+          <h3 className="text-sm font-medium">Block Configuration</h3>
+          <ul className="text-xs text-gray-600 list-disc pl-4 mt-2 space-y-1">
+            <li>Input Block: Contains a dataset (MNIST or CIFAR10)</li>
+            <li>Output Block: Contains loss function and optimizer</li>
+            <li>Select blocks to configure parameters</li>
+          </ul>
         </div>
       </div>
     </div>

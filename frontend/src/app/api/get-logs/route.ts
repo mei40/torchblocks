@@ -5,7 +5,7 @@ import path from 'path';
 export async function GET() {
   try {
     console.log("pwd", process.cwd());
-    const logPath = path.resolve(process.cwd(), '../../torchblocks/backend/antlr/log_sample.log');
+    const logPath = path.resolve(process.cwd(), '../../torchblocks/backend/local/build/model_run.log');
     
     // Read the log file
     const logContent = await fs.readFile(logPath, 'utf-8');
