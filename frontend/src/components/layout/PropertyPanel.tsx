@@ -13,50 +13,61 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode }) =>
   const { updateBlock } = useStore();
   const [localParams, setLocalParams] = useState<Record<string, any>>({});
   const [isDirty, setIsDirty] = useState(false);
+  // New state for nested components
+  const [activeTab, setActiveTab] = useState<string>('main');
 
   // When selected node changes, reset the local state
   useEffect(() => {
     if (selectedNode) {
+      // Reset tab to main when node changes
+      if (selectedNode.type === 'input') {
+        setActiveTab('dataset');
+      } else if (selectedNode.type === 'output') {
+        setActiveTab('loss');
+      } else {
+        setActiveTab('main');
+      }
+      
       // Initialize parameters from node data
       const initialParams: Record<string, any> = {};
       
       if (selectedNode.type === 'linear') {
-        initialParams.in_features = selectedNode.data.parameters?.in_features || selectedNode.data.in_features || 784;
-        initialParams.out_features = selectedNode.data.parameters?.out_features || selectedNode.data.out_features || 128;
-        initialParams.bias = selectedNode.data.parameters?.bias !== undefined ? selectedNode.data.parameters.bias : true;
+        initialParams.in_features = selectedNode.data.parameters?.in_features || 784;
+        initialParams.out_features = selectedNode.data.parameters?.out_features || 128;
       } else if (selectedNode.type === 'conv2d') {
-        initialParams.in_channels = selectedNode.data.parameters?.in_channels || selectedNode.data.in_channels || 3;
-        initialParams.out_channels = selectedNode.data.parameters?.out_channels || selectedNode.data.channels || 64;
-        initialParams.kernel_size = selectedNode.data.parameters?.kernel_size || selectedNode.data.kernel_size || 3;
-        initialParams.stride = selectedNode.data.parameters?.stride || selectedNode.data.stride || 1;
-        initialParams.padding = selectedNode.data.parameters?.padding || selectedNode.data.padding || 1;
-      } else if (selectedNode.type === 'relu') {
-        initialParams.inplace = selectedNode.data.parameters?.inplace !== undefined ? selectedNode.data.parameters.inplace : true;
-      } else if (selectedNode.type === 'log_softmax') {
-        initialParams.dim = selectedNode.data.parameters?.dim || selectedNode.data.dim || 1;
-      } else if (selectedNode.type === 'view') {
-        initialParams.out_shape = selectedNode.data.parameters?.out_shape || selectedNode.data.out_shape || '[batch_size, -1]';
+        initialParams.in_channels = selectedNode.data.parameters?.in_channels || 3;
+        initialParams.out_channels = selectedNode.data.parameters?.out_channels || 64;
+        initialParams.kernel_size = selectedNode.data.parameters?.kernel_size || 3;
+        initialParams.stride = selectedNode.data.parameters?.stride || 1;
+        initialParams.padding = selectedNode.data.parameters?.padding || 1;
       } else if (selectedNode.type === 'max_pool2d') {
-        initialParams.kernel_size = selectedNode.data.parameters?.kernel_size || selectedNode.data.kernel_size || 2;
-        initialParams.stride = selectedNode.data.parameters?.stride || selectedNode.data.stride || 2;
-        initialParams.padding = selectedNode.data.parameters?.padding || selectedNode.data.padding || 0;
-      } else if (selectedNode.type === 'crossentropyloss' || selectedNode.type === 'mseloss') {
-        initialParams.reduction = selectedNode.data.parameters?.reduction || selectedNode.data.reduction || 'mean';
-      } else if (selectedNode.type === 'adam') {
-        initialParams.learning_rate = selectedNode.data.parameters?.learning_rate || selectedNode.data.learning_rate || 0.001;
-        initialParams.weight_decay = selectedNode.data.parameters?.weight_decay || selectedNode.data.weight_decay || 0;
-      } else if (selectedNode.type === 'sgd') {
-        initialParams.learning_rate = selectedNode.data.parameters?.learning_rate || selectedNode.data.learning_rate || 0.001;
-        initialParams.momentum = selectedNode.data.parameters?.momentum || selectedNode.data.momentum || 0;
-        initialParams.weight_decay = selectedNode.data.parameters?.weight_decay || selectedNode.data.weight_decay || 0;
-        initialParams.nesterov = selectedNode.data.parameters?.nesterov !== undefined ? selectedNode.data.parameters.nesterov : false;
-      } else if (selectedNode.type === 'mnist') {
-        initialParams.batch_size = selectedNode.data.parameters?.batch_size || selectedNode.data.batch_size || 64;
-        initialParams.shuffle = selectedNode.data.parameters?.shuffle !== undefined ? selectedNode.data.parameters.shuffle : true;
+        initialParams.kernel_size = selectedNode.data.parameters?.kernel_size || 2;
+        initialParams.stride = selectedNode.data.parameters?.stride || 2;
+        initialParams.padding = selectedNode.data.parameters?.padding || 0;
+      } else if (selectedNode.type === 'view') {
+        initialParams.out_shape = selectedNode.data.parameters?.out_shape || '[batch_size, -1]';
+      } else if (selectedNode.type === 'log_softmax') {
+        // LogSoftmax doesn't need parameters
       } else if (selectedNode.type === 'input') {
-        initialParams.features = selectedNode.data.parameters?.features || selectedNode.data.features || 3;
+        // Input node embeds a dataset
+        initialParams.dataset_type = selectedNode.data.dataset?.type || 'mnist';
+        
+        // Add dataset shape parameters - NEW CODE
+        initialParams.channels = selectedNode.data.dataset?.shape?.channels || 
+          (selectedNode.data.dataset?.type === 'cifar10' ? 3 : 1);
+        initialParams.height = selectedNode.data.dataset?.shape?.height || 
+          (selectedNode.data.dataset?.type === 'cifar10' ? 32 : 28);
+        initialParams.width = selectedNode.data.dataset?.shape?.width || 
+          (selectedNode.data.dataset?.type === 'cifar10' ? 32 : 28);
       } else if (selectedNode.type === 'output') {
-        initialParams.neurons = selectedNode.data.parameters?.neurons || selectedNode.data.neurons || 1;
+        // Output node embeds loss function and optimizer
+        initialParams.loss_type = selectedNode.data.lossFunction?.type || 'crossentropyloss';
+        initialParams.optimizer_type = selectedNode.data.optimizer?.type || 'adam';
+        initialParams.learning_rate = selectedNode.data.optimizer?.parameters?.learning_rate || 0.001;
+        
+        if (selectedNode.data.optimizer?.type === 'sgd') {
+          initialParams.momentum = selectedNode.data.optimizer?.parameters?.momentum || 0;
+        }
       }
       
       setLocalParams(initialParams);
@@ -97,6 +108,33 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode }) =>
       processedValue = value === 'true';
     }
     
+    // Special handling for dataset type to update shape defaults
+    if (paramName === 'dataset_type') {
+      if (value === 'mnist' && localParams.dataset_type !== 'mnist') {
+        // If switching to MNIST, update shape to default MNIST shape
+        setLocalParams(prev => ({
+          ...prev,
+          [paramName]: processedValue,
+          channels: 1,
+          height: 28, 
+          width: 28
+        }));
+        setIsDirty(true);
+        return;
+      } else if (value === 'cifar10' && localParams.dataset_type !== 'cifar10') {
+        // If switching to CIFAR10, update shape to default CIFAR10 shape
+        setLocalParams(prev => ({
+          ...prev,
+          [paramName]: processedValue,
+          channels: 3,
+          height: 32,
+          width: 32
+        }));
+        setIsDirty(true);
+        return;
+      }
+    }
+    
     // Update local state
     setLocalParams(prev => ({
       ...prev,
@@ -119,56 +157,75 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode }) =>
     }
 
     // Create updated node data with all the necessary properties
-    const updatedData = {
-      ...selectedNode.data,
-      parameters: { ...finalParams }
-    };
+    let updatedData = { ...selectedNode.data };
     
-    // IMPORTANT: Copy parameters to direct properties for proper display in nodes
-    if (selectedNode.type === 'linear') {
-      updatedData.in_features = finalParams.in_features;
-      updatedData.out_features = finalParams.out_features;
-    } else if (selectedNode.type === 'conv2d') {
-      updatedData.in_channels = finalParams.in_channels;
-      updatedData.channels = finalParams.out_channels;
-      updatedData.kernel_size = finalParams.kernel_size;
-      updatedData.stride = finalParams.stride;
-      updatedData.padding = finalParams.padding;
-    } else if (selectedNode.type === 'input') {
-      updatedData.features = finalParams.features;
-    } else if (selectedNode.type === 'output') {
-      updatedData.neurons = finalParams.neurons;
-    } else if (selectedNode.type === 'view') {
-      updatedData.out_shape = finalParams.out_shape;
-    } else if (selectedNode.type === 'max_pool2d') {
-      updatedData.kernel_size = finalParams.kernel_size;
-      updatedData.stride = finalParams.stride;
-      updatedData.padding = finalParams.padding;
-    } else if (selectedNode.type === 'log_softmax') {
-      updatedData.dim = finalParams.dim;
-    } else if (selectedNode.type === 'adam') {
-      updatedData.learning_rate = finalParams.learning_rate;
-      updatedData.weight_decay = finalParams.weight_decay;
-    } else if (selectedNode.type === 'sgd') {
-      updatedData.learning_rate = finalParams.learning_rate;
-      updatedData.momentum = finalParams.momentum;
-      updatedData.weight_decay = finalParams.weight_decay;
-      updatedData.nesterov = finalParams.nesterov;
-    } else if (selectedNode.type === 'mnist') {
-      updatedData.batch_size = finalParams.batch_size;
-      updatedData.shuffle = finalParams.shuffle;
-    } else if (selectedNode.type === 'crossentropyloss' || selectedNode.type === 'mseloss') {
-      updatedData.reduction = finalParams.reduction;
+    // Update based on node type
+    if (selectedNode.type === 'input') {
+      // Update the dataset embedded in the input node
+      updatedData = {
+        ...updatedData,
+        dataset: {
+          type: finalParams.dataset_type,
+          parameters: {},
+          // Add shape information to dataset - NEW CODE
+          shape: {
+            channels: finalParams.channels,
+            height: finalParams.height,
+            width: finalParams.width
+          }
+        }
+      };
+    } 
+    else if (selectedNode.type === 'output') {
+      // Update the loss function and optimizer embedded in the output node
+      updatedData = {
+        ...updatedData,
+        lossFunction: {
+          type: finalParams.loss_type,
+          parameters: {}
+        },
+        optimizer: {
+          type: finalParams.optimizer_type,
+          parameters: {
+            learning_rate: finalParams.learning_rate
+          }
+        }
+      };
+      
+      // Add momentum parameter if SGD optimizer
+      if (finalParams.optimizer_type === 'sgd') {
+        updatedData.optimizer.parameters.momentum = finalParams.momentum;
+      }
+    }
+    else {
+      // Update parameters for regular nodes
+      updatedData = {
+        ...updatedData,
+        parameters: { 
+          ...updatedData.parameters,
+          ...Object.fromEntries(
+            Object.entries(finalParams).filter(([key]) => 
+              !key.startsWith('dataset_') && 
+              !key.startsWith('loss_') && 
+              !key.startsWith('optimizer_') &&
+              key !== 'learning_rate' &&
+              key !== 'momentum' &&
+              key !== 'channels' &&  // Exclude dataset shape params
+              key !== 'height' &&    // from regular parameter updates
+              key !== 'width'
+            )
+          )
+        }
+      };
     }
     
     // Force ReactFlow to re-render by adding a unique key
     updatedData._renderKey = Date.now();
     
-    // Create a block update object - IMPORTANT: Don't modify the position
+    // Create a block update object
     const updatedBlock: Partial<Block> = {
       id: selectedNode.id,
       data: updatedData,
-      // DO NOT include position here to avoid resetting the position
     };
     
     // Update the block in the store
@@ -177,453 +234,423 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode }) =>
     setIsDirty(false);
   };
 
-  // Safe toString helper function
-  const safeToString = (value: any): string => {
-    return value !== undefined && value !== null ? value.toString() : 'false';
-  };
-
-  // Render different forms based on node type
+  // Render different forms based on node type and active tab
   const renderForm = () => {
-    switch (selectedNode?.type) {
-      case 'linear':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="in_features" className="block text-sm font-medium text-gray-700 mb-1">
-                Input Features
-              </label>
-              <input
-                id="in_features"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.in_features}
-                onChange={(e) => handleInputChange('in_features', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="out_features" className="block text-sm font-medium text-gray-700 mb-1">
-                Output Features
-              </label>
-              <input
-                id="out_features"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.out_features}
-                onChange={(e) => handleInputChange('out_features', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="bias" className="block text-sm font-medium text-gray-700 mb-1">
-                Bias
-              </label>
-              <select
-                id="bias"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={safeToString(localParams.bias)}
-                onChange={(e) => handleInputChange('bias', e.target.value)}
-              >
-                <option value="true">True</option>
-                <option value="false">False</option>
-              </select>
-            </div>
-          </div>
-        );
-        
-      case 'conv2d':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="in_channels" className="block text-sm font-medium text-gray-700 mb-1">
-                Input Channels
-              </label>
-              <input
-                id="in_channels"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.in_channels}
-                onChange={(e) => handleInputChange('in_channels', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="out_channels" className="block text-sm font-medium text-gray-700 mb-1">
-                Output Channels
-              </label>
-              <input
-                id="out_channels"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.out_channels}
-                onChange={(e) => handleInputChange('out_channels', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="kernel_size" className="block text-sm font-medium text-gray-700 mb-1">
-                Kernel Size
-              </label>
-              <input
-                id="kernel_size"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.kernel_size}
-                onChange={(e) => handleInputChange('kernel_size', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="stride" className="block text-sm font-medium text-gray-700 mb-1">
-                Stride
-              </label>
-              <input
-                id="stride"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.stride}
-                onChange={(e) => handleInputChange('stride', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="padding" className="block text-sm font-medium text-gray-700 mb-1">
-                Padding
-              </label>
-              <input
-                id="padding"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.padding}
-                onChange={(e) => handleInputChange('padding', e.target.value)}
-              />
-            </div>
-          </div>
-        );
-      
-      case 'relu':
-        return (
-          <div>
-            <label htmlFor="inplace" className="block text-sm font-medium text-gray-700 mb-1">
-              Inplace
-            </label>
-            <select
-              id="inplace"
-              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              value={safeToString(localParams.inplace)}
-              onChange={(e) => handleInputChange('inplace', e.target.value)}
+    if (!selectedNode) return null;
+    
+    // For Input node
+    if (selectedNode.type === 'input') {
+      return (
+        <div className="space-y-4">
+          {/* Tabs for dataset editing */}
+          <div className="flex border-b border-gray-200">
+            <button
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'main' || activeTab === 'dataset' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('dataset')}
             >
-              <option value="true">True</option>
-              <option value="false">False</option>
-            </select>
-          </div>
-        );
-        
-      case 'log_softmax':
-        return (
-          <div>
-            <label htmlFor="dim" className="block text-sm font-medium text-gray-700 mb-1">
-              Dimension
-            </label>
-            <input
-              id="dim"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              value={localParams.dim}
-              onChange={(e) => handleInputChange('dim', e.target.value)}
-            />
-          </div>
-        );
-        
-      case 'view':
-        return (
-          <div>
-            <label htmlFor="out_shape" className="block text-sm font-medium text-gray-700 mb-1">
-              Output Shape
-            </label>
-            <input
-              id="out_shape"
-              type="text"
-              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              value={localParams.out_shape || ''}
-              onChange={(e) => handleInputChange('out_shape', e.target.value)}
-              placeholder="e.g., [batch_size, -1]"
-            />
-          </div>
-        );
-        
-      case 'max_pool2d':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="kernel_size" className="block text-sm font-medium text-gray-700 mb-1">
-                Kernel Size
-              </label>
-              <input
-                id="kernel_size"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.kernel_size}
-                onChange={(e) => handleInputChange('kernel_size', e.target.value)}
-              />
-            </div>
+              Dataset
+            </button>
             
-            <div>
-              <label htmlFor="stride" className="block text-sm font-medium text-gray-700 mb-1">
-                Stride
-              </label>
-              <input
-                id="stride"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.stride}
-                onChange={(e) => handleInputChange('stride', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="padding" className="block text-sm font-medium text-gray-700 mb-1">
-                Padding
-              </label>
-              <input
-                id="padding"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.padding}
-                onChange={(e) => handleInputChange('padding', e.target.value)}
-              />
-            </div>
-          </div>
-        );
-      
-      case 'crossentropyloss':
-      case 'mseloss':
-        return (
-          <div>
-            <label htmlFor="reduction" className="block text-sm font-medium text-gray-700 mb-1">
-              Reduction
-            </label>
-            <select
-              id="reduction"
-              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              value={localParams.reduction || 'mean'}
-              onChange={(e) => handleInputChange('reduction', e.target.value)}
+            {/* Add a new tab for shape editing */}
+            <button
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'shape' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('shape')}
             >
-              <option value="none">None</option>
-              <option value="mean">Mean</option>
-              <option value="sum">Sum</option>
-            </select>
+              Shape
+            </button>
           </div>
-        );
-        
-      case 'adam':
-        return (
-          <div className="space-y-4">
+          
+          {/* Dataset Form */}
+          {activeTab === 'dataset' && (
             <div>
-              <label htmlFor="learning_rate" className="block text-sm font-medium text-gray-700 mb-1">
-                Learning Rate
-              </label>
-              <input
-                id="learning_rate"
-                type="text"
-                inputMode="decimal"
-                step="0.0001"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.learning_rate}
-                onChange={(e) => handleInputChange('learning_rate', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="weight_decay" className="block text-sm font-medium text-gray-700 mb-1">
-                Weight Decay
-              </label>
-              <input
-                id="weight_decay"
-                type="text"
-                inputMode="decimal"
-                step="0.0001"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.weight_decay}
-                onChange={(e) => handleInputChange('weight_decay', e.target.value)}
-              />
-            </div>
-          </div>
-        );
-        
-      case 'sgd':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="learning_rate" className="block text-sm font-medium text-gray-700 mb-1">
-                Learning Rate
-              </label>
-              <input
-                id="learning_rate"
-                type="text"
-                inputMode="decimal"
-                step="0.0001"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.learning_rate}
-                onChange={(e) => handleInputChange('learning_rate', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="momentum" className="block text-sm font-medium text-gray-700 mb-1">
-                Momentum
-              </label>
-              <input
-                id="momentum"
-                type="text"
-                inputMode="decimal"
-                step="0.01"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.momentum}
-                onChange={(e) => handleInputChange('momentum', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="weight_decay" className="block text-sm font-medium text-gray-700 mb-1">
-                Weight Decay
-              </label>
-              <input
-                id="weight_decay"
-                type="text"
-                inputMode="decimal"
-                step="0.0001"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.weight_decay}
-                onChange={(e) => handleInputChange('weight_decay', e.target.value)}
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="nesterov" className="block text-sm font-medium text-gray-700 mb-1">
-                Nesterov
+              <label htmlFor="dataset_type" className="block text-sm font-medium text-gray-700 mb-1">
+                Dataset Type
               </label>
               <select
-                id="nesterov"
+                id="dataset_type"
                 className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={safeToString(localParams.nesterov)}
-                onChange={(e) => handleInputChange('nesterov', e.target.value)}
+                value={localParams.dataset_type || 'mnist'}
+                onChange={(e) => handleInputChange('dataset_type', e.target.value)}
               >
-                <option value="true">True</option>
-                <option value="false">False</option>
+                <option value="mnist">MNIST</option>
+                <option value="cifar10">CIFAR10</option>
               </select>
+              
+              {/* Dataset info based on type */}
+              <div className="mt-3 text-xs text-gray-500">
+                <p>Default shape:</p>
+                <p className="font-mono">
+                  {localParams.dataset_type === 'mnist' ? '(1, 28, 28)' : '(3, 32, 32)'}
+                </p>
+                <p className="mt-2">Customize shape in the Shape tab.</p>
+              </div>
             </div>
-          </div>
-        );
-        
-      case 'mnist':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="batch_size" className="block text-sm font-medium text-gray-700 mb-1">
-                Batch Size
-              </label>
-              <input
-                id="batch_size"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={localParams.batch_size}
-                onChange={(e) => handleInputChange('batch_size', e.target.value)}
-              />
+          )}
+          
+          {/* Shape Form - NEW CODE */}
+          {activeTab === 'shape' && (
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="channels" className="block text-sm font-medium text-gray-700 mb-1">
+                  Channels
+                </label>
+                <input
+                  id="channels"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  value={localParams.channels}
+                  onChange={(e) => handleInputChange('channels', e.target.value)}
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="height" className="block text-sm font-medium text-gray-700 mb-1">
+                  Height
+                </label>
+                <input
+                  id="height"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  value={localParams.height}
+                  onChange={(e) => handleInputChange('height', e.target.value)}
+                />
+              </div>
+              
+              <div>
+                <label htmlFor="width" className="block text-sm font-medium text-gray-700 mb-1">
+                  Width
+                </label>
+                <input
+                  id="width"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  value={localParams.width}
+                  onChange={(e) => handleInputChange('width', e.target.value)}
+                />
+              </div>
+              
+              <div className="mt-2 text-xs text-gray-500">
+                <p>Current shape: ({localParams.channels}, {localParams.height}, {localParams.width})</p>
+                <p className="mt-1">Note: Changing these values may require adjusting subsequent layers.</p>
+              </div>
             </div>
-            
-            <div>
-              <label htmlFor="shuffle" className="block text-sm font-medium text-gray-700 mb-1">
-                Shuffle
-              </label>
-              <select
-                id="shuffle"
-                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                value={safeToString(localParams.shuffle)}
-                onChange={(e) => handleInputChange('shuffle', e.target.value)}
-              >
-                <option value="true">True</option>
-                <option value="false">False</option>
-              </select>
-            </div>
-          </div>
-        );
-        
-      case 'input':
-        return (
-          <div>
-            <label htmlFor="features" className="block text-sm font-medium text-gray-700 mb-1">
-              Features
-            </label>
-            <input
-              id="features"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              value={localParams.features}
-              onChange={(e) => handleInputChange('features', e.target.value)}
-            />
-          </div>
-        );
-        
-      case 'output':
-        return (
-          <div>
-            <label htmlFor="neurons" className="block text-sm font-medium text-gray-700 mb-1">
-              Neurons
-            </label>
-            <input
-              id="neurons"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              value={localParams.neurons}
-              onChange={(e) => handleInputChange('neurons', e.target.value)}
-            />
-          </div>
-        );
-        
-      case 'sigmoid':
-      case 'tanh':
-        return (
-          <div className="text-sm text-gray-500 italic py-2">
-            This activation function has no editable parameters.
-          </div>
-        );
-        
-      default:
-        return (
-          <div className="text-sm text-gray-500 italic py-2">
-            No editable parameters available for this component.
-          </div>
-        );
+          )}
+        </div>
+      );
     }
+    
+    // For Output node
+    else if (selectedNode.type === 'output') {
+      return (
+        <div className="space-y-4">
+          {/* Tabs for different components */}
+          <div className="flex border-b border-gray-200">
+            <button
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'loss' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('loss')}
+            >
+              Loss Function
+            </button>
+            <button
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === 'optimizer' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => setActiveTab('optimizer')}
+            >
+              Optimizer
+            </button>
+          </div>
+          
+          {/* Loss Function Form */}
+          {activeTab === 'loss' && (
+            <div>
+              <label htmlFor="loss_type" className="block text-sm font-medium text-gray-700 mb-1">
+                Loss Function Type
+              </label>
+              <select
+                id="loss_type"
+                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                value={localParams.loss_type || 'crossentropyloss'}
+                onChange={(e) => handleInputChange('loss_type', e.target.value)}
+              >
+                <option value="crossentropyloss">CrossEntropyLoss</option>
+                <option value="mseloss">MSELoss</option>
+              </select>
+            </div>
+          )}
+          
+          {/* Optimizer Form */}
+          {activeTab === 'optimizer' && (
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="optimizer_type" className="block text-sm font-medium text-gray-700 mb-1">
+                  Optimizer Type
+                </label>
+                <select
+                  id="optimizer_type"
+                  className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  value={localParams.optimizer_type || 'adam'}
+                  onChange={(e) => handleInputChange('optimizer_type', e.target.value)}
+                >
+                  <option value="adam">Adam</option>
+                  <option value="sgd">SGD</option>
+                </select>
+              </div>
+              
+              <div>
+                <label htmlFor="learning_rate" className="block text-sm font-medium text-gray-700 mb-1">
+                  Learning Rate
+                </label>
+                <input
+                  id="learning_rate"
+                  type="text"
+                  inputMode="decimal"
+                  step="0.0001"
+                  className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                  value={localParams.learning_rate}
+                  onChange={(e) => handleInputChange('learning_rate', e.target.value)}
+                />
+              </div>
+              
+              {localParams.optimizer_type === 'sgd' && (
+                <div>
+                  <label htmlFor="momentum" className="block text-sm font-medium text-gray-700 mb-1">
+                    Momentum
+                  </label>
+                  <input
+                    id="momentum"
+                    type="text"
+                    inputMode="decimal"
+                    step="0.01"
+                    className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                    value={localParams.momentum}
+                    onChange={(e) => handleInputChange('momentum', e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    // For Linear layer
+    else if (selectedNode.type === 'linear') {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="in_features" className="block text-sm font-medium text-gray-700 mb-1">
+              Input Features
+            </label>
+            <input
+              id="in_features"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              value={localParams.in_features}
+              onChange={(e) => handleInputChange('in_features', e.target.value)}
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="out_features" className="block text-sm font-medium text-gray-700 mb-1">
+              Output Features
+            </label>
+            <input
+              id="out_features"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              value={localParams.out_features}
+              onChange={(e) => handleInputChange('out_features', e.target.value)}
+            />
+          </div>
+        </div>
+      );
+    }
+    
+    // For Conv2D layer
+    else if (selectedNode.type === 'conv2d') {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="in_channels" className="block text-sm font-medium text-gray-700 mb-1">
+              Input Channels
+            </label>
+            <input
+              id="in_channels"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              value={localParams.in_channels}
+              onChange={(e) => handleInputChange('in_channels', e.target.value)}
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="out_channels" className="block text-sm font-medium text-gray-700 mb-1">
+              Output Channels
+            </label>
+            <input
+              id="out_channels"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              value={localParams.out_channels}
+              onChange={(e) => handleInputChange('out_channels', e.target.value)}
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="kernel_size" className="block text-sm font-medium text-gray-700 mb-1">
+              Kernel Size
+            </label>
+            <input
+              id="kernel_size"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              value={localParams.kernel_size}
+              onChange={(e) => handleInputChange('kernel_size', e.target.value)}
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="stride" className="block text-sm font-medium text-gray-700 mb-1">
+              Stride
+            </label>
+            <input
+              id="stride"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              value={localParams.stride}
+              onChange={(e) => handleInputChange('stride', e.target.value)}
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="padding" className="block text-sm font-medium text-gray-700 mb-1">
+              Padding
+            </label>
+            <input
+              id="padding"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              value={localParams.padding}
+              onChange={(e) => handleInputChange('padding', e.target.value)}
+            />
+          </div>
+        </div>
+      );
+    }
+    
+    // For View layer
+    else if (selectedNode.type === 'view') {
+      return (
+        <div>
+          <label htmlFor="out_shape" className="block text-sm font-medium text-gray-700 mb-1">
+            Output Shape
+          </label>
+          <input
+            id="out_shape"
+            type="text"
+            className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            value={localParams.out_shape || ''}
+            onChange={(e) => handleInputChange('out_shape', e.target.value)}
+            placeholder="e.g., [batch_size, -1]"
+          />
+        </div>
+      );
+    }
+    
+    // For MaxPool2D layer
+    else if (selectedNode.type === 'max_pool2d') {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="kernel_size" className="block text-sm font-medium text-gray-700 mb-1">
+              Kernel Size
+            </label>
+            <input
+              id="kernel_size"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              value={localParams.kernel_size}
+              onChange={(e) => handleInputChange('kernel_size', e.target.value)}
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="stride" className="block text-sm font-medium text-gray-700 mb-1">
+              Stride
+            </label>
+            <input
+              id="stride"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              value={localParams.stride}
+              onChange={(e) => handleInputChange('stride', e.target.value)}
+            />
+          </div>
+          
+          <div>
+            <label htmlFor="padding" className="block text-sm font-medium text-gray-700 mb-1">
+              Padding
+            </label>
+            <input
+              id="padding"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              value={localParams.padding}
+              onChange={(e) => handleInputChange('padding', e.target.value)}
+            />
+          </div>
+        </div>
+      );
+    }
+    
+    // For activation functions with no parameters
+    else if (['relu', 'sigmoid', 'tanh', 'log_softmax'].includes(selectedNode.type ?? '')) {
+      return (
+        <div className="text-sm text-gray-500 italic py-2">
+          This activation function has no editable parameters.
+        </div>
+      );
+    }
+    
+    // Default case
+    return (
+      <div className="text-sm text-gray-500 italic py-2">
+        No editable parameters available for this component.
+      </div>
+    );
   };
 
   return (

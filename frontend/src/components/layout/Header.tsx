@@ -206,6 +206,14 @@ export const Header = () => {
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
               }
+              .note {
+                background-color: #fffde7;
+                border-left: 4px solid #fbc02d;
+                padding: 10px 15px;
+                margin-top: 15px;
+                text-align: left;
+                font-size: 14px;
+              }
             </style>
           </head>
           <body>
@@ -216,11 +224,9 @@ export const Header = () => {
                 <p>To connect TorchBlocks with Google Colab, please:</p>
                 <p>1. Click the link below to authorize TorchBlocks</p>
                 <div class="link-section">
-                  <a href="${authInfo.authUrl}" class="auth-link" target="_blank">${authInfo.authUrl}</a>
+                  <a href="#" class="auth-link" id="googleAuthLink" onclick="openGoogleAuth(event)">${authInfo.authUrl}</a>
                 </div>
-                <p>2. After authorizing, you'll receive an authentication code</p>
-                <p>3. Enter that code below:</p>
-                
+                <p>2. Enter the authentication code below:</p>
                 <div class="auth-code-section">
                   <input 
                     type="text" 
@@ -239,11 +245,19 @@ export const Header = () => {
               
               <div id="step3" style="display: none;">
                 <p>Authentication successful!</p>
-                <p>You'll be redirected to Google Colab in a moment...</p>
+                <p>This window will close automatically, and Google Colab will open in a new tab.</p>
               </div>
             </div>
             
             <script>
+              // Function to open Google Auth in a new window without closing the popup
+              function openGoogleAuth(event) {
+                event.preventDefault();
+                const authUrl = document.getElementById('googleAuthLink').textContent;
+                window.open(authUrl, 'GoogleAuthWindow', 'width=600,height=700');
+                return false;
+              }
+              
               document.getElementById('submitCode').addEventListener('click', async function() {
                 const authCode = document.getElementById('authCode').value.trim();
                 
@@ -275,18 +289,27 @@ export const Header = () => {
                   document.getElementById('step2').style.display = 'none';
                   document.getElementById('step3').style.display = 'block';
                   
-                  // Redirect to Colab after a brief delay
-                  setTimeout(() => {
-                    window.location.href = "${authInfo.colabUrl}";
-                  }, 2000);
-                  
                   // Notify the parent window of successful authentication
                   window.opener.postMessage({ type: 'GOOGLE_AUTH_SUCCESS', email: result.email }, '*');
+                  
+                  // Open Colab in a new tab
+                  window.open("${authInfo.colabUrl}", "_blank");
+                  
+                  // Close this popup after a brief delay
+                  setTimeout(() => {
+                    window.close();
+                  }, 2000);
+                  
                 } catch (error) {
                   document.getElementById('step1').style.display = 'block';
                   document.getElementById('step2').style.display = 'none';
                   document.getElementById('errorMessage').textContent = error.message || 'Authentication failed. Please try again.';
                 }
+              });
+
+              // Focus the auth link to make it more noticeable
+              document.addEventListener('DOMContentLoaded', function() {
+                document.getElementById('googleAuthLink').focus();
               });
             </script>
           </body>
