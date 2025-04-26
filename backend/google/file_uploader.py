@@ -22,11 +22,13 @@ This script uploads a single file to Google Drive.
 import googleapiclient.http
 import httplib2
 import oauth2client.client
-import six
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 import sys
+import time
+import json
+import io
 
 # OAuth 2.0 scope that will be authorized.
 # Check https://developers.google.com/drive/scopes for all available scopes.
@@ -36,6 +38,9 @@ OAUTH2_SCOPE = "https://www.googleapis.com/auth/drive.file"
 # This was generated from Brandon Mei's Google Account. 
 # Please contact him (brandonymei@gmail.com) for any inquiries. 
 CLIENT_SECRETS = "backend/google/build/client_secrets.json"
+AUTHINFO_FILE = "backend/google/build/authinfo.json"
+AUTHINFO_SKELETON = "backend/google/SkeletonAuth.json"
+RESULTS_FILE = "backend/local/build/local_results.json"
 
 # Path to the file to upload.
 FILENAME = sys.argv[1]
@@ -46,30 +51,41 @@ MAIN_FOLDER = "torchblocks"
 TITLE = "PrimaryModel.ipynb"
 DESCRIPTION = "Main Jupyter Notebook"
 
+with open(AUTHINFO_SKELETON, "rb") as auth_fp:
+    self_authinfo = json.load(auth_fp)
 
 # Perform OAuth2.0 authorization flow.
 flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRETS, OAUTH2_SCOPE)
 flow.redirect_uri = oauth2client.client.OOB_CALLBACK_URN
 authorize_url = flow.step1_get_authorize_url()
-print("Go to the following link in your browser: " + authorize_url)
-# `six` library supports Python2 and Python3 without redefining builtin input()
-code = six.moves.input("Enter verification code: ").strip()
+self_authinfo["auth_link"] = authorize_url
+with open(AUTHINFO_FILE, "wb") as auth_fp:
+    auth_fp.write(json.dumps(self_authinfo).encode("utf-8"))
+code = ""
+while not code:
+    with open(AUTHINFO_FILE, "rb") as auth_fp:
+        temp_authinfo = json.load(auth_fp)
+        code = temp_authinfo["auth_code"]
+    if not code:
+        time.sleep(1)
+self_authinfo["auth_code"] = code
 credentials = flow.step2_exchange(code)
 
 # Create an authorized Drive API client.
 http = httplib2.Http()
 credentials.authorize(http)
-drive_service = build("drive", "v2", http=http)
+drive_service = build("drive", "v3", http=http)
 
 file_metadata = {
-        "title": "TorchBlocks",
+        "name": "TorchBlocks",
         "mimeType": "application/vnd.google-apps.folder",
     }
 
 # pylint: disable=maybe-no-member
-folderfile = drive_service.files().insert(body=file_metadata, fields="id").execute()
-print(f'Folder ID: "{folderfile.get("id")}".')
+folderfile = drive_service.files().create(body=file_metadata, fields="id").execute()
+
 folder_id = folderfile.get("id")
+print(f"Folder ID: {folder_id}")
 
 # Insert a file. Files are comprised of contents and metadata.
 # MediaFileUpload abstracts uploading file contents from a file on disk.
@@ -78,23 +94,59 @@ media_body = googleapiclient.http.MediaFileUpload(
 )
 # The body contains the metadata for the file.
 body = {
-    "title": TITLE,
-    "parents": [folderfile],
+    "name": TITLE,
+    "parents": [folder_id],
     "description": DESCRIPTION,
 }
 
 # Perform the request and print the result.
 try:
-  new_file = (
-      drive_service.files().insert(body=body, media_body=media_body).execute()
-  )
-  file_title = new_file.get("title")
-  file_desc = new_file.get("description")
-  if file_title == TITLE and file_desc == DESCRIPTION:
-    print(
-        f"File is uploaded \nTitle : {file_title}  \nDescription : {file_desc}"
+    new_file = (
+      drive_service.files().create(body=body, media_body=media_body).execute()
     )
+    print(f"File ID: {new_file.get('id')}")
+    colab_link = "https://colab.research.google.com/drive/" + new_file.get("id")
+    self_authinfo["colab_link"] = colab_link
+    with open(AUTHINFO_FILE, "wb") as auth_fp:
+        auth_fp.write(json.dumps(self_authinfo).encode("utf-8"))
 
 except HttpError as error:
   # TODO(developer) - Handle errors from drive API.
   print(f"An error occurred: {error}")
+
+# First, insert json file to the folder.
+JSON_FILENAME = "backend/google/SkeletonResults.json"
+media_body = googleapiclient.http.MediaFileUpload(
+    JSON_FILENAME, mimetype=MIMETYPE, resumable=True
+)
+# The body contains the metadata for the file.
+body = {
+    "name": "output_results.json",
+    "parents": [folder_id],
+    "description": "Execution results",
+}
+
+# Perform the request and print the result.
+try:
+    new_file = (
+      drive_service.files().create(body=body, media_body=media_body).execute()
+    )
+    print(f"JSON File ID: {new_file.get('id')}")
+    json_file_id = new_file.get("id")
+
+except HttpError as error:
+  # TODO(developer) - Handle errors from drive API.
+  print(f"An error occurred: {error}")
+
+
+# Then, check for updated results.
+while True:
+    request = drive_service.files().get_media(fileId=json_file_id)
+    file = io.BytesIO()
+    downloader = googleapiclient.http.MediaIoBaseDownload(file, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    with open(RESULTS_FILE, "wb") as results_fp:
+        results_fp.write(file.getvalue())
+    time.sleep(5)
