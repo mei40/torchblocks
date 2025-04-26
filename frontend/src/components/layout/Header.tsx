@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { downloadNetworkJson, saveNetworkJsonToServer } from '../visualization/networkToJson';
 
@@ -11,7 +11,38 @@ export const Header = () => {
   const [showLogs, setShowLogs] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [authPopup, setAuthPopup] = useState<Window | null>(null);
   const { blocks, connections } = useStore();
+
+  // Listen for messages from the authentication popup
+  useEffect(() => {
+    const handleAuthMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+        setIsLoggedIn(true);
+        setUserEmail(event.data.email);
+        setNotificationMessage(`Signed in as ${event.data.email}`);
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 5000);
+      }
+    };
+
+    window.addEventListener('message', handleAuthMessage);
+    return () => window.removeEventListener('message', handleAuthMessage);
+  }, []);
+
+  // Check if popup is closed
+  useEffect(() => {
+    if (authPopup) {
+      const checkPopupClosed = setInterval(() => {
+        if (authPopup.closed) {
+          clearInterval(checkPopupClosed);
+          setAuthPopup(null);
+        }
+      }, 1000);
+
+      return () => clearInterval(checkPopupClosed);
+    }
+  }, [authPopup]);
 
   const runTests = async () => {
     try {
@@ -59,43 +90,219 @@ export const Header = () => {
     setTimeout(() => setShowNotification(false), 5000);
   };
 
-  const handleGoogleSignIn = () => {
-    // This function will be connected to Google authentication endpoint
-    // For now, it's a placeholder that will be filled later
-    console.log('Google sign in initiated');
+  const handleGoogleSignIn = async () => {
+    // If a popup is already open, focus it instead of opening a new one
+    if (authPopup && !authPopup.closed) {
+      authPopup.focus();
+      return;
+    }
     
-    // replace this with your actual Google auth URL
-    const googleAuthUrl = '/api/auth/google';
-    
-    // Either open in a popup or redirect
-    // Open in a popup
+    // Open popup window with dimensions
     const width = 500;
     const height = 600;
     const left = window.screen.width / 2 - width / 2;
     const top = window.screen.height / 2 - height / 2;
     
-    window.open(
-      googleAuthUrl,
+    const popup = window.open(
+      'about:blank',
       'Google Sign In',
       `toolbar=no, menubar=no, width=${width}, height=${height}, top=${top}, left=${left}`
     );
     
-    // Redirect approach
-    // window.location.href = googleAuthUrl;
-  };
-
-  // Function would be called when user successfully logs in
-  // Would need to implement a way to receive this data from your auth flow
-  const handleAuthSuccess = (data: { email: string }) => {
-    setIsLoggedIn(true);
-    setUserEmail(data.email);
-    setNotificationMessage(`Signed in as ${data.email}`);
-    setShowNotification(true);
-    setTimeout(() => setShowNotification(false), 5000);
+    if (!popup) {
+      alert('Popup blocked by browser. Please enable popups for this site.');
+      return;
+    }
+    
+    setAuthPopup(popup);
+    
+    try {
+      // Fetch authentication information from the backend
+      const response = await fetch('/api/google/auth-info');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch authentication information');
+      }
+      
+      const authInfo = await response.json();
+      
+      // Display authentication link in popup
+      popup.document.write(`
+        <html>
+          <head>
+            <title>Google Authentication</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+                text-align: center;
+                background-color: #f7f9fc;
+                line-height: 1.6;
+              }
+              .container {
+                max-width: 450px;
+                margin: 0 auto;
+                background: white;
+                padding: 30px;
+                border-radius: 8px;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+              }
+              h2 {
+                color: #333;
+                margin-bottom: 20px;
+              }
+              p {
+                margin-bottom: 20px;
+                color: #555;
+              }
+              .link-section {
+                background-color: #f0f4f8;
+                padding: 15px;
+                border-radius: 5px;
+                margin-bottom: 20px;
+                word-break: break-all;
+              }
+              .auth-link {
+                color: #4285f4;
+                font-weight: bold;
+              }
+              .auth-code-section {
+                margin-top: 30px;
+              }
+              input {
+                width: 100%;
+                padding: 10px;
+                font-size: 16px;
+                margin-bottom: 15px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+              }
+              button {
+                background-color: #4285f4;
+                color: white;
+                border: none;
+                padding: 12px 20px;
+                font-size: 16px;
+                border-radius: 4px;
+                cursor: pointer;
+              }
+              button:hover {
+                background-color: #357ae8;
+              }
+              .error-message {
+                color: #d23f31;
+                margin-top: 15px;
+              }
+              .loader {
+                border: 4px solid #f3f3f3;
+                border-top: 4px solid #3498db;
+                border-radius: 50%;
+                width: 30px;
+                height: 30px;
+                animation: spin 2s linear infinite;
+                margin: 20px auto;
+              }
+              @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h2>Google Authentication for TorchBlocks</h2>
+              
+              <div id="step1" style="display: block;">
+                <p>To connect TorchBlocks with Google Colab, please:</p>
+                <p>1. Click the link below to authorize TorchBlocks</p>
+                <div class="link-section">
+                  <a href="${authInfo.authUrl}" class="auth-link" target="_blank">${authInfo.authUrl}</a>
+                </div>
+                <p>2. After authorizing, you'll receive an authentication code</p>
+                <p>3. Enter that code below:</p>
+                
+                <div class="auth-code-section">
+                  <input 
+                    type="text" 
+                    id="authCode" 
+                    placeholder="Paste authentication code here" 
+                  />
+                  <button id="submitCode">Submit</button>
+                  <div id="errorMessage" class="error-message"></div>
+                </div>
+              </div>
+              
+              <div id="step2" style="display: none;">
+                <div class="loader"></div>
+                <p>Verifying authentication code...</p>
+              </div>
+              
+              <div id="step3" style="display: none;">
+                <p>Authentication successful!</p>
+                <p>You'll be redirected to Google Colab in a moment...</p>
+              </div>
+            </div>
+            
+            <script>
+              document.getElementById('submitCode').addEventListener('click', async function() {
+                const authCode = document.getElementById('authCode').value.trim();
+                
+                if (!authCode) {
+                  document.getElementById('errorMessage').textContent = 'Please enter the authentication code';
+                  return;
+                }
+                
+                document.getElementById('step1').style.display = 'none';
+                document.getElementById('step2').style.display = 'block';
+                
+                try {
+                  // Verify the authentication code with the backend
+                  const response = await fetch('/api/google/verify-auth', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ code: authCode }),
+                  });
+                  
+                  if (!response.ok) {
+                    throw new Error('Invalid authentication code');
+                  }
+                  
+                  const result = await response.json();
+                  
+                  // Show success message
+                  document.getElementById('step2').style.display = 'none';
+                  document.getElementById('step3').style.display = 'block';
+                  
+                  // Redirect to Colab after a brief delay
+                  setTimeout(() => {
+                    window.location.href = "${authInfo.colabUrl}";
+                  }, 2000);
+                  
+                  // Notify the parent window of successful authentication
+                  window.opener.postMessage({ type: 'GOOGLE_AUTH_SUCCESS', email: result.email }, '*');
+                } catch (error) {
+                  document.getElementById('step1').style.display = 'block';
+                  document.getElementById('step2').style.display = 'none';
+                  document.getElementById('errorMessage').textContent = error.message || 'Authentication failed. Please try again.';
+                }
+              });
+            </script>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      console.error('Authentication error:', error);
+      popup.close();
+      setAuthPopup(null);
+      setNotificationMessage('Authentication failed. Please try again.');
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 5000);
+    }
   };
 
   const handleSignOut = () => {
-    // Implement sign out logic here
     setIsLoggedIn(false);
     setUserEmail('');
     setNotificationMessage('Signed out successfully');

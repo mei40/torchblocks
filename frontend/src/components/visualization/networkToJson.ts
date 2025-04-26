@@ -10,7 +10,7 @@ export const convertNetworkToJson = (blocks: Block[], connections: Connection[])
   const { orderedBlocks, layerMap } = traceNetworkPath(blocks, connections);
   
   // Group blocks by layer
-  const layerBlocks = new Map<number, Block[]>();
+  const layerBlocks = new Map<number, Block[]>(); 
   orderedBlocks.forEach(block => {
     const layer = layerMap.get(block.id) || 0;
     if (!layerBlocks.has(layer)) {
