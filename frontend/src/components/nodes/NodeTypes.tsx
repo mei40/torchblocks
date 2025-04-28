@@ -5,7 +5,7 @@ import { Handle, Position } from 'reactflow';
 export function LinearNode({ data, selected }: { data: any; selected?: boolean }) {
   // Get parameters from both possible locations and use latest
   const inFeatures = data.in_features ?? data.parameters?.in_features ?? 784;
-  const outFeatures = data.out_features ?? data.parameters?.out_features ?? 128;
+  const outFeatures = data.out_features ?? data.parameters?.out_features ?? 10;
   
   return (
     <div className={`px-4 py-2 shadow-md rounded-md bg-white border-2 ${selected ? 'border-blue-500' : 'border-gray-200'}`}>
@@ -299,7 +299,7 @@ export function OutputNode({ data, selected }: { data: any; selected?: boolean }
 
 // Other Node Components
 export function ViewNode({ data, selected }: { data: any; selected?: boolean }) {
-  const outShape = data.out_shape ?? data.parameters?.out_shape ?? '[batch_size, -1]';
+  const outShape = data.out_shape ?? data.parameters?.out_shape ?? '784';
   
   return (
     <div className={`px-4 py-2 shadow-md rounded-md bg-white border-2 ${selected ? 'border-blue-500' : 'border-gray-200'}`}>

@@ -90,9 +90,9 @@ export const deriveNetworkSizes = (
       size = block.data.parameters?.neurons || 1;
       outputSize = size;
     } else if (block.type === 'linear') {
-      size = block.data.parameters?.out_features || 128;
+      size = block.data.parameters?.out_features || 10;
     } else if (block.type === 'conv2d') {
-      size = block.data.parameters?.out_channels || 64;
+      size = block.data.parameters?.out_channels || 784;
     }
     
     layerSizes.get(layer)!.push(size);

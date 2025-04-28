@@ -405,7 +405,7 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
           label: 'Linear Layer',
           parameters: {
             in_features: 784,
-            out_features: 128,
+            out_features: 10,
           }
         };
       } 
@@ -417,7 +417,7 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
             out_channels: 64,
             kernel_size: 3,
             stride: 1,
-            padding: 1
+            padding: 0
           }
         };
       } 
@@ -425,7 +425,7 @@ export const MainCanvas: React.FC<MainCanvasProps> = ({ onNodeSelect }) => {
         nodeData = {
           label: 'View Layer',
           parameters: {
-            out_shape: '[batch_size, -1]'
+            out_shape: '784'
           },
           transformation: 'Reshape tensor'
         };
