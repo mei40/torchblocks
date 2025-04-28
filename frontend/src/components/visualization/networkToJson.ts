@@ -99,12 +99,12 @@ export const convertNetworkToJson = (blocks: Block[], connections: Connection[])
           // Get the in_shape from either the previous layer's out_shape or use a default
           const inShape = sourceBlocks.length > 0 && sourceBlocks[0]?.data.parameters?.out_features
             ? sourceBlocks[0]?.data.parameters?.out_features
-            : block.data.parameters?.in_features || 64;
+            : block.data.parameters?.in_features || 784;
             
           layerObj = {
             ...layerObj,
             in_shape: inShape,
-            out_shape: block.data.parameters?.out_features || 128
+            out_shape: block.data.parameters?.out_features || 10
           };
         } else if (block.type === 'conv2d') {
           layerObj = {
@@ -129,7 +129,7 @@ export const convertNetworkToJson = (blocks: Block[], connections: Connection[])
         } else if (block.type === 'view') {
           layerObj = {
             ...layerObj,
-            out_shape: block.data.parameters?.out_shape || '[batch_size, -1]'
+            out_shape: block.data.parameters?.out_shape || '784'
           };
         } else {
           // For any other layer types, include all parameters

@@ -33,19 +33,19 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode }) =>
       
       if (selectedNode.type === 'linear') {
         initialParams.in_features = selectedNode.data.parameters?.in_features || 784;
-        initialParams.out_features = selectedNode.data.parameters?.out_features || 128;
+        initialParams.out_features = selectedNode.data.parameters?.out_features || 10;
       } else if (selectedNode.type === 'conv2d') {
         initialParams.in_channels = selectedNode.data.parameters?.in_channels || 3;
         initialParams.out_channels = selectedNode.data.parameters?.out_channels || 64;
         initialParams.kernel_size = selectedNode.data.parameters?.kernel_size || 3;
         initialParams.stride = selectedNode.data.parameters?.stride || 1;
-        initialParams.padding = selectedNode.data.parameters?.padding || 1;
+        initialParams.padding = selectedNode.data.parameters?.padding || 0;
       } else if (selectedNode.type === 'max_pool2d') {
         initialParams.kernel_size = selectedNode.data.parameters?.kernel_size || 2;
         initialParams.stride = selectedNode.data.parameters?.stride || 2;
         initialParams.padding = selectedNode.data.parameters?.padding || 0;
       } else if (selectedNode.type === 'view') {
-        initialParams.out_shape = selectedNode.data.parameters?.out_shape || '[batch_size, -1]';
+        initialParams.out_shape = selectedNode.data.parameters?.out_shape || '784';
       } else if (selectedNode.type === 'log_softmax') {
         // LogSoftmax doesn't need parameters
       } else if (selectedNode.type === 'input') {
@@ -578,7 +578,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({ selectedNode }) =>
             className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
             value={localParams.out_shape || ''}
             onChange={(e) => handleInputChange('out_shape', e.target.value)}
-            placeholder="e.g., [batch_size, -1]"
+            placeholder="e.g., 784"
           />
         </div>
       );

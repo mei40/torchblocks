@@ -1,25 +1,40 @@
 {
-    "packet_type": "model_params", 
+    "packet_type": "model_params",
     "model": {
-        "dataset": "mnist",
-        "loss_function": "crossentropyloss",
-        "optimizer": {"name": "adam", "lr": 0.001},
-        "layers": [
-            {
-                "layer_type": "view", 
-                "shape": [-1, 784]
-            },
-            {
-                "layer_type": "linear",
-                "in_shape": 784, 
-                "out_shape": 10
-            }, 
-            {
-                "layer_type": "relu"
-            }, 
-            {
-                "layer_type": "log_softmax"
-            }
-        ]
-    } 
+      "layers": [
+        {
+          "layer_type": "view",
+          "out_shape": "784"
+        },
+        {
+          "layer_type": "linear",
+          "in_shape": 784,
+          "out_shape": "10"
+        },
+        {
+          "layer_type": "relu"
+        },
+        {
+          "layer_type": "log_softmax"
+        }
+      ]
+    },
+    "dataset": {
+      "type": "mnist",
+      "shape": {
+        "channels": 1,
+        "height": 28,
+        "width": 28
+      }
+    },
+    "loss_function": {
+      "type": "crossentropyloss",
+      "parameters": {}
+    },
+    "optimizer": {
+      "type": "adam",
+      "parameters": {
+        "learning_rate": 0.001
+      }
+    }
 }
