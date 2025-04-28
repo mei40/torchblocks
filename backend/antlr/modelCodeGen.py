@@ -64,7 +64,12 @@ class CodeGenerator():
                 out_shape = layer["out_shape"]
                 layerlist.append(f"self.layer{curr_layer} = torch.nn.Linear({in_shape}, {out_shape})")
             if layer["layer_type"] == "conv2d":
-                pass # constraints need to be defined
+                in_channels = layer["in_channels"]
+                out_channels = layer["out_channels"]
+                kernel_size = layer["kernel_size"]
+                stride = layer["stride"]
+                padding = layer["padding"]
+                layerlist.append(f"self.layer{curr_layer} = torch.nn.Conv2d({in_channels}, {out_channels}, kernel_size={kernel_size}, stride={stride}, padding={padding})")
 
             # Activation Functions:
             elif layer["layer_type"] == "relu":
