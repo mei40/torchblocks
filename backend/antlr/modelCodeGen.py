@@ -42,7 +42,7 @@ class CodeGenerator():
         layerlist = [f"super({self.name}, self).__init__()"]
         curr_layer = 1
         # initialize hyperparameters of the model
-        dataset = self.model_dict["dataset"]
+        dataset = self.model_dict["dataset"]["type"]
         loss_function = self.model_dict["loss_function"]
         optimizer = self.model_dict["optimizer"]
         #Handle dataset:
@@ -51,13 +51,13 @@ class CodeGenerator():
             layerlist.append("self.test_dataset = torchvision.datasets.MNIST('build/data', train=False, download=True, transform=torchvision.transforms.ToTensor())")
 
         #Handle loss function:
-        if loss_function == "crossentropyloss":
+        if loss_function["type"] == "crossentropyloss":
             layerlist.append("self.loss_function = torch.nn.CrossEntropyLoss()")
-        elif loss_function == "mseloss":
+        elif loss_function["type"] == "mseloss":
             layerlist.append("self.loss_function = torch.nn.MSELoss()")
 
         # Initializes all specified layers
-        for layer in self.model_dict["layers"]:
+        for layer in self.model_dict["model"]["layers"]:
             # Layer blocks:
             if layer["layer_type"] == "linear":
                 in_shape = layer["in_shape"]
@@ -83,10 +83,10 @@ class CodeGenerator():
             curr_layer += 1
 
         #Handle optimizer:
-        if optimizer["name"] == "adam":
-            learning_rate = float(optimizer["lr"])
+        if optimizer["type"] == "adam":
+            learning_rate = float(optimizer["parameters"]["learning_rate"])
             layerlist.append(f"self.optimizer = torch.optim.Adam(self.parameters(), lr={learning_rate})")
-        elif optimizer["name"] == "sgd":
+        elif optimizer["type"] == "sgd":
             learning_rate = float(optimizer["lr"])
             momentum = float(optimizer["momentum"])
             layerlist.append(f"self.optimizer = torch.optim.SGD(self.parameters(), lr={learning_rate}, momentum={momentum})")
@@ -100,14 +100,14 @@ class CodeGenerator():
         linelist = ["def forward(self, curr_tensor):"]
         layerlist = []
         curr_layer = 1
-        for layer in self.model_dict["layers"]:
+        for layer in self.model_dict["model"]["layers"]:
 
             if layer["layer_type"] == "log_softmax":
                 layerlist.append(f"curr_tensor = self.layer{curr_layer}(curr_tensor, -1)")
 
             elif layer["layer_type"] == "view":
-                shape1 = tuple(layer["shape"])
-                layerlist.append(f"curr_tensor = curr_tensor.view{shape1}") #parentheses are added
+                shape1 = layer["out_shape"]
+                layerlist.append(f"curr_tensor = curr_tensor.view(-1, {shape1})") #parentheses are added
 
             elif layer["layer_type"] == "maxpool2d":
                 kernel_size = int(layer["kernel_size"])
