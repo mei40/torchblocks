@@ -23,13 +23,12 @@ if __name__ == "__main__":
     out_filename = "backend/local/build/local_results.json"
     model_filename = "backend/local/build/model_params.txt"
     for epoch in range(int(sys.argv[1])):
-        train_loss, train_acc = trainer.train(device, epoch)
+        train_loss, train_acc = trainer.train(device, epoch, loss, accs, out_filename)
         test_result = trainer.test(device)
-        loss += train_loss
-        accs += train_acc
+        loss = train_loss
+        accs = train_acc
         loss.append((float(epoch+1), test_result["loss"]))
         accs.append((float(epoch+1), test_result["accuracy"]))
         with open(out_filename, "w+") as outfile:
             jsondict = {"losses": loss, "accuracies": accs}
             outfile.write(json.dumps(jsondict, indent=4))
-    torch.save(curr_model.state_dict(), model_filename)

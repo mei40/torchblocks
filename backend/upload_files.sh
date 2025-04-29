@@ -1,7 +1,7 @@
 cd ../
 mkdir -p backend/local/build
 (echo Starting Code Generation...) > backend/local/build/model_run.log
-python3 backend/antlr/compile_main.py backend/antlr/tests/inputs/input1.json # frontend/build/model.json
+(python3 backend/antlr/compile_main.py frontend/build/model.json) >> backend/local/build/model_run.log 2>&1
 (echo Code Generation Finished!) >> backend/local/build/model_run.log
 (echo Starting Notebook Generation...) >> backend/local/build/model_run.log
 python3 backend/google/gen_notebook.py

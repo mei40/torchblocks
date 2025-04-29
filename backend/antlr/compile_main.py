@@ -2,6 +2,7 @@ from modelCodeGen import CodeGenerator
 from jsonLoader import process_json
 import sys
 import json
+import importlib
 
 def main():
     if len(sys.argv) != 2:
@@ -20,7 +21,16 @@ def main():
 
     with open(model_filename, "w+") as model_file:
         model_file.write(gen_str)
-    return 0
+
+    model_filename2 = "backend/antlr/build/PrimaryModel.py"
+    with open(model_filename2, "w+") as model_file:
+        model_file.write(gen_str)
+
+    #get parameter count
+    # import build.PrimaryModel as model
+    primaryModule = importlib.import_module("build.PrimaryModel")
+    curr_model = primaryModule.PrimaryModel()
+    print(f"Total parameters: {sum(p.numel() for p in curr_model.parameters())} parameters")
     
 
 if __name__ == "__main__":
