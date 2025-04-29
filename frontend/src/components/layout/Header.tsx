@@ -11,36 +11,87 @@ export const Header = () => {
   const [showLogs, setShowLogs] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [colabUrl, setColabUrl] = useState<string>('');
   const [authPopup, setAuthPopup] = useState<Window | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const { blocks, connections } = useStore();
+
+  // Debug function to help trace message events
+  const debugLog = (message: string) => {
+    console.log(`[Auth Debug] ${message}`);
+  };
 
   // Listen for messages from the authentication popup
   useEffect(() => {
+    debugLog("Setting up message event listener");
+    
     const handleAuthMessage = (event: MessageEvent) => {
+      debugLog(`Received message: ${JSON.stringify(event.data)}`);
+      
       if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+        debugLog("Auth success message received");
         setIsLoggedIn(true);
-        setUserEmail(event.data.email);
-        setNotificationMessage(`Signed in as ${event.data.email}`);
+        setUserEmail(event.data.email || 'user@torchblocks.com');
+        
+        // Save Colab URL if available
+        if (event.data.colabUrl) {
+          setColabUrl(event.data.colabUrl);
+          setNotificationMessage(`Signed in as ${event.data.email || 'user@torchblocks.com'}. Google Colab is ready.`);
+        } else {
+          setNotificationMessage(`Signed in as ${event.data.email || 'user@torchblocks.com'}`);
+        }
+        
         setShowNotification(true);
+        
+        // Close the popup if it's still open
+        if (authPopup && !authPopup.closed) {
+          debugLog("Closing auth popup from event handler");
+          authPopup.close();
+          setAuthPopup(null);
+        }
+        
+        setTimeout(() => setShowNotification(false), 5000);
+      } else if (event.data?.type === 'GOOGLE_AUTH_ERROR') {
+        debugLog(`Auth error message received: ${event.data.error}`);
+        setNotificationMessage(`Authentication error: ${event.data.error || 'Unknown error'}`);
+        setShowNotification(true);
+        
+        // Close the popup if it's still open
+        if (authPopup && !authPopup.closed) {
+          debugLog("Closing auth popup after error");
+          authPopup.close();
+          setAuthPopup(null);
+        }
+        
         setTimeout(() => setShowNotification(false), 5000);
       }
     };
 
     window.addEventListener('message', handleAuthMessage);
-    return () => window.removeEventListener('message', handleAuthMessage);
-  }, []);
+    debugLog("Message event listener added");
+    
+    return () => {
+      window.removeEventListener('message', handleAuthMessage);
+      debugLog("Message event listener removed");
+    };
+  }, [authPopup]);
 
   // Check if popup is closed
   useEffect(() => {
     if (authPopup) {
+      debugLog("Starting popup monitoring interval");
       const checkPopupClosed = setInterval(() => {
         if (authPopup.closed) {
+          debugLog("Auth popup detected as closed");
           clearInterval(checkPopupClosed);
           setAuthPopup(null);
         }
       }, 1000);
 
-      return () => clearInterval(checkPopupClosed);
+      return () => {
+        clearInterval(checkPopupClosed);
+        debugLog("Popup monitoring interval cleared");
+      };
     }
   }, [authPopup]);
 
@@ -90,34 +141,93 @@ export const Header = () => {
     setTimeout(() => setShowNotification(false), 5000);
   };
 
+  const handleUploadToColab = async () => {
+    try {
+      setIsUploading(true);
+      setNotificationMessage('Uploading model to Google Colab...');
+      setShowNotification(true);
+      
+      const response = await fetch('/api/upload-to-colab', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          modelFile: 'backend/google/build/PrimaryModel.ipynb'
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to upload to Colab');
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setNotificationMessage('Model upload started. The Colab link will appear when ready.');
+        
+        // Start checking for the Colab link
+        startCheckingForColabLink();
+      } else {
+        setIsUploading(false);
+        setNotificationMessage(`Upload failed: ${result.error}`);
+      }
+    } catch (error) {
+      setIsUploading(false);
+      console.error('Error uploading to Colab:', error);
+      setNotificationMessage(`Upload error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+  
+  // Function to check for Colab link
+  const startCheckingForColabLink = () => {
+    const checkInterval = setInterval(async () => {
+      try {
+        // Fetch the latest auth info
+        const response = await fetch('/api/google/auth-info');
+        const authInfo = await response.json();
+        
+        if (authInfo.colabUrl && authInfo.colabUrl !== colabUrl && 
+            !authInfo.colabUrl.includes('placeholder-notebook-url-will-be-here')) {
+          // We have a new Colab URL
+          setColabUrl(authInfo.colabUrl);
+          setIsUploading(false);
+          setNotificationMessage('Your model is ready in Google Colab!');
+          setShowNotification(true);
+          
+          // Stop checking once we have the URL
+          clearInterval(checkInterval);
+        }
+      } catch (error) {
+        console.error('Error checking for Colab link:', error);
+      }
+    }, 5000); // Check every 5 seconds
+    
+    // Stop checking after 2 minutes (to prevent infinite checking)
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      if (isUploading) {
+        setIsUploading(false);
+        setNotificationMessage('Colab link generation timed out or failed. Please check console logs and verify SkeletonAuth.json exists.');
+        setShowNotification(true);
+      }
+    }, 2 * 60 * 1000); 
+  }
+
   const handleGoogleSignIn = async () => {
+    debugLog("Google Sign In button clicked");
+    
     // If a popup is already open, focus it instead of opening a new one
     if (authPopup && !authPopup.closed) {
+      debugLog("Auth popup already open, focusing it");
       authPopup.focus();
       return;
     }
     
-    // Open popup window with dimensions
-    const width = 500;
-    const height = 600;
-    const left = window.screen.width / 2 - width / 2;
-    const top = window.screen.height / 2 - height / 2;
-    
-    const popup = window.open(
-      'about:blank',
-      'Google Sign In',
-      `toolbar=no, menubar=no, width=${width}, height=${height}, top=${top}, left=${left}`
-    );
-    
-    if (!popup) {
-      alert('Popup blocked by browser. Please enable popups for this site.');
-      return;
-    }
-    
-    setAuthPopup(popup);
-    
     try {
       // Fetch authentication information from the backend
+      debugLog("Fetching auth info from backend");
       const response = await fetch('/api/google/auth-info');
       
       if (!response.ok) {
@@ -125,200 +235,237 @@ export const Header = () => {
       }
       
       const authInfo = await response.json();
+      debugLog(`Auth Info received: ${JSON.stringify(authInfo)}`);
       
-      // Display authentication link in popup
-      popup.document.write(`
-        <html>
-          <head>
-            <title>Google Authentication</title>
-            <style>
-              body {
-                font-family: Arial, sans-serif;
-                padding: 20px;
-                text-align: center;
-                background-color: #f7f9fc;
-                line-height: 1.6;
-              }
-              .container {
-                max-width: 450px;
-                margin: 0 auto;
-                background: white;
-                padding: 30px;
-                border-radius: 8px;
-                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-              }
-              h2 {
-                color: #333;
-                margin-bottom: 20px;
-              }
-              p {
-                margin-bottom: 20px;
-                color: #555;
-              }
-              .link-section {
-                background-color: #f0f4f8;
-                padding: 15px;
-                border-radius: 5px;
-                margin-bottom: 20px;
-                word-break: break-all;
-              }
-              .auth-link {
-                color: #4285f4;
-                font-weight: bold;
-              }
-              .auth-code-section {
-                margin-top: 30px;
-              }
-              input {
-                width: 100%;
-                padding: 10px;
-                font-size: 16px;
-                margin-bottom: 15px;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-              }
-              button {
-                background-color: #4285f4;
-                color: white;
-                border: none;
-                padding: 12px 20px;
-                font-size: 16px;
-                border-radius: 4px;
-                cursor: pointer;
-              }
-              button:hover {
-                background-color: #357ae8;
-              }
-              .error-message {
-                color: #d23f31;
-                margin-top: 15px;
-              }
-              .loader {
-                border: 4px solid #f3f3f3;
-                border-top: 4px solid #3498db;
-                border-radius: 50%;
-                width: 30px;
-                height: 30px;
-                animation: spin 2s linear infinite;
-                margin: 20px auto;
-              }
-              @keyframes spin {
-                0% { transform: rotate(0deg); }
-                100% { transform: rotate(360deg); }
-              }
-              .note {
-                background-color: #fffde7;
-                border-left: 4px solid #fbc02d;
-                padding: 10px 15px;
-                margin-top: 15px;
-                text-align: left;
-                font-size: 14px;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <h2>Google Authentication for TorchBlocks</h2>
-              
-              <div id="step1" style="display: block;">
-                <p>To connect TorchBlocks with Google Colab, please:</p>
-                <p>1. Click the link below to authorize TorchBlocks</p>
-                <div class="link-section">
-                  <a href="#" class="auth-link" id="googleAuthLink" onclick="openGoogleAuth(event)">${authInfo.authUrl}</a>
-                </div>
-                <p>2. Enter the authentication code below:</p>
-                <div class="auth-code-section">
-                  <input 
-                    type="text" 
-                    id="authCode" 
-                    placeholder="Paste authentication code here" 
-                  />
-                  <button id="submitCode">Submit</button>
-                  <div id="errorMessage" class="error-message"></div>
-                </div>
-              </div>
-              
-              <div id="step2" style="display: none;">
-                <div class="loader"></div>
-                <p>Verifying authentication code...</p>
-              </div>
-              
-              <div id="step3" style="display: none;">
-                <p>Authentication successful!</p>
-                <p>This window will close automatically, and Google Colab will open in a new tab.</p>
-              </div>
-            </div>
+      // Only continue if we have a valid auth URL that's not the placeholder
+      if (!authInfo.authUrl || authInfo.authUrl.includes('placeholder-auth-url-will-be-here')) {
+        debugLog("Invalid or placeholder auth URL received");
+        setNotificationMessage('Authentication information not available. Please try again later.');
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 5000);
+        return;
+      }
+      
+      // Open popup window with dimensions
+      const width = 600;
+      const height = 700;
+      const left = window.screen.width / 2 - width / 2;
+      const top = window.screen.height / 2 - height / 2;
+      
+      debugLog("Opening auth popup window");
+      
+      // Open the auth URL directly in the popup
+      const popup = window.open(
+        authInfo.authUrl,
+        'Google Sign In',
+        `toolbar=no, menubar=no, width=${width}, height=${height}, top=${top}, left=${left}`
+      );
+      
+      if (!popup) {
+        debugLog("Popup was blocked");
+        alert('Popup blocked by browser. Please enable popups for this site.');
+        return;
+      }
+      
+      debugLog("Auth popup created successfully");
+      setAuthPopup(popup);
+      
+      // Set up a fallback mechanism if the popup doesn't redirect properly
+      setTimeout(() => {
+        if (popup && !popup.closed) {
+          debugLog("Checking if auth popup needs manual code entry");
+          
+          try {
+            // Only add this if the popup is on our domain or hasn't navigated away
+            // This might fail with cross-origin restrictions
+            const currentUrl = popup.location.href;
             
-            <script>
-              // Function to open Google Auth in a new window without closing the popup
-              function openGoogleAuth(event) {
-                event.preventDefault();
-                const authUrl = document.getElementById('googleAuthLink').textContent;
-                window.open(authUrl, 'GoogleAuthWindow', 'width=600,height=700');
-                return false;
+            // If still on about:blank or at Google OAuth page
+            if (currentUrl.includes('accounts.google.com') || currentUrl === 'about:blank') {
+              debugLog("Popup appears to be stuck, switching to manual entry mode");
+              
+              // Switch to manual entry mode
+              popup.close();
+              
+              // Open a new popup with manual entry UI
+              const manualPopup = window.open(
+                'about:blank',
+                'Google Sign In',
+                `toolbar=no, menubar=no, width=${width}, height=${height}, top=${top}, left=${left}`
+              );
+              
+              if (!manualPopup) {
+                alert('Popup blocked by browser. Please enable popups for this site.');
+                return;
               }
               
-              document.getElementById('submitCode').addEventListener('click', async function() {
-                const authCode = document.getElementById('authCode').value.trim();
-                
-                if (!authCode) {
-                  document.getElementById('errorMessage').textContent = 'Please enter the authentication code';
-                  return;
-                }
-                
-                document.getElementById('step1').style.display = 'none';
-                document.getElementById('step2').style.display = 'block';
-                
-                try {
-                  // Verify the authentication code with the backend
-                  const response = await fetch('/api/google/verify-auth', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ code: authCode }),
-                  });
-                  
-                  if (!response.ok) {
-                    throw new Error('Invalid authentication code');
-                  }
-                  
-                  const result = await response.json();
-                  
-                  // Show success message
-                  document.getElementById('step2').style.display = 'none';
-                  document.getElementById('step3').style.display = 'block';
-                  
-                  // Notify the parent window of successful authentication
-                  window.opener.postMessage({ type: 'GOOGLE_AUTH_SUCCESS', email: result.email }, '*');
-                  
-                  // Open Colab in a new tab
-                  window.open("${authInfo.colabUrl}", "_blank");
-                  
-                  // Close this popup after a brief delay
-                  setTimeout(() => {
-                    window.close();
-                  }, 2000);
-                  
-                } catch (error) {
-                  document.getElementById('step1').style.display = 'block';
-                  document.getElementById('step2').style.display = 'none';
-                  document.getElementById('errorMessage').textContent = error.message || 'Authentication failed. Please try again.';
-                }
-              });
-
-              // Focus the auth link to make it more noticeable
-              document.addEventListener('DOMContentLoaded', function() {
-                document.getElementById('googleAuthLink').focus();
-              });
-            </script>
-          </body>
-        </html>
-      `);
+              setAuthPopup(manualPopup);
+              
+              // Write manual entry UI to the popup
+              manualPopup.document.write(`
+                <html>
+                  <head>
+                    <title>Google Authentication</title>
+                    <style>
+                      body {
+                        font-family: Arial, sans-serif;
+                        padding: 20px;
+                        text-align: center;
+                        background-color: #f7f9fc;
+                        line-height: 1.6;
+                      }
+                      .container {
+                        max-width: 450px;
+                        margin: 0 auto;
+                        background: white;
+                        padding: 30px;
+                        border-radius: 8px;
+                        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                      }
+                      h2 {
+                        color: #333;
+                        margin-bottom: 20px;
+                      }
+                      p {
+                        margin-bottom: 20px;
+                        color: #555;
+                      }
+                      .important {
+                        background-color: #fffde7;
+                        border-left: 4px solid #fbc02d;
+                        padding: 15px;
+                        margin: 20px 0;
+                        text-align: left;
+                      }
+                      .auth-code-section {
+                        margin-top: 30px;
+                      }
+                      input {
+                        width: 100%;
+                        padding: 10px;
+                        font-size: 16px;
+                        margin-bottom: 15px;
+                        border: 1px solid #ddd;
+                        border-radius: 4px;
+                      }
+                      button {
+                        background-color: #4285f4;
+                        color: white;
+                        border: none;
+                        padding: 12px 20px;
+                        font-size: 16px;
+                        border-radius: 4px;
+                        cursor: pointer;
+                      }
+                      button:hover {
+                        background-color: #357ae8;
+                      }
+                      .error-message {
+                        color: #d23f31;
+                        margin-top: 15px;
+                      }
+                    </style>
+                  </head>
+                  <body>
+                    <div class="container">
+                      <h2>Manual Authentication</h2>
+                      
+                      <div id="step1">
+                        <p>It seems the automatic redirect didn't work. Please follow these steps:</p>
+                        
+                        <div class="important">
+                          <p><strong>1.</strong> If the Google authentication page is still open in another window, complete the authorization there.</p>
+                          <p><strong>2.</strong> After authorizing, Google will display a code. Copy that code and paste it below.</p>
+                        </div>
+                        
+                        <div class="auth-code-section">
+                          <input 
+                            type="text" 
+                            id="authCode" 
+                            placeholder="Paste authorization code here" 
+                          />
+                          <button id="submitCode">Submit</button>
+                          <div id="errorMessage" class="error-message"></div>
+                        </div>
+                      </div>
+                      
+                      <div id="step2" style="display: none;">
+                        <p>Verifying authentication code...</p>
+                        <div style="border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 2s linear infinite; margin: 20px auto;"></div>
+                        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+                      </div>
+                      
+                      <div id="step3" style="display: none;">
+                        <p>Authentication successful!</p>
+                        <p>This window will close automatically.</p>
+                      </div>
+                    </div>
+                    
+                    <script>
+                      document.getElementById('submitCode').addEventListener('click', async function() {
+                        const authCode = document.getElementById('authCode').value.trim();
+                        
+                        if (!authCode) {
+                          document.getElementById('errorMessage').textContent = 'Please enter the authentication code';
+                          return;
+                        }
+                        
+                        document.getElementById('step1').style.display = 'none';
+                        document.getElementById('step2').style.display = 'block';
+                        
+                        try {
+                          // Verify the authentication code with the backend
+                          const response = await fetch('/api/google/verify-auth', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ code: authCode }),
+                          });
+                          
+                          if (!response.ok) {
+                            throw new Error('Invalid authentication code');
+                          }
+                          
+                          const result = await response.json();
+                          
+                          // Show success message
+                          document.getElementById('step2').style.display = 'none';
+                          document.getElementById('step3').style.display = 'block';
+                          
+                          // Notify the parent window of successful authentication
+                          window.opener.postMessage({ type: 'GOOGLE_AUTH_SUCCESS', email: result.email || 'user@torchblocks.com' }, '*');
+                          
+                          // Close this popup after a brief delay
+                          setTimeout(() => {
+                            window.close();
+                          }, 2000);
+                          
+                        } catch (error) {
+                          document.getElementById('step1').style.display = 'block';
+                          document.getElementById('step2').style.display = 'none';
+                          document.getElementById('errorMessage').textContent = error.message || 'Authentication failed. Please try again.';
+                        }
+                      });
+                    </script>
+                  </body>
+                </html>
+              `);
+            }
+          } catch (e) {
+            // Catch cross-origin errors when trying to access popup location
+            debugLog("Cross-origin restriction error - can't check popup location");
+          }
+        }
+      }, 30000); // 30 seconds timeout for auto-redirect
+      
     } catch (error) {
+      debugLog(`Authentication error: ${error}`);
       console.error('Authentication error:', error);
-      popup.close();
-      setAuthPopup(null);
+      if (authPopup) {
+        authPopup.close();
+        setAuthPopup(null);
+      }
       setNotificationMessage('Authentication failed. Please try again.');
       setShowNotification(true);
       setTimeout(() => setShowNotification(false), 5000);
@@ -328,6 +475,8 @@ export const Header = () => {
   const handleSignOut = () => {
     setIsLoggedIn(false);
     setUserEmail('');
+    setColabUrl('');
+    setIsUploading(false);
     setNotificationMessage('Signed out successfully');
     setShowNotification(true);
     setTimeout(() => setShowNotification(false), 5000);
@@ -341,6 +490,28 @@ export const Header = () => {
           {isLoggedIn ? (
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">{userEmail}</span>
+              {isUploading ? (
+                <button
+                  disabled
+                  className="px-4 py-2 text-sm bg-gray-400 text-white rounded-md cursor-not-allowed"
+                >
+                  Uploading...
+                </button>
+              ) : colabUrl ? (
+                <button
+                  onClick={() => window.open(colabUrl, '_blank')}
+                  className="px-4 py-2 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                >
+                  Open Colab
+                </button>
+              ) : (
+                <button
+                  onClick={handleUploadToColab}
+                  className="px-4 py-2 text-sm bg-green-500 text-white rounded-md hover:bg-green-600"
+                >
+                  Upload to Colab
+                </button>
+              )}
               <button
                 onClick={handleSignOut}
                 className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
@@ -416,6 +587,30 @@ export const Header = () => {
               Show Logs
             </button>
           )}
+          {isLoggedIn && colabUrl && notificationMessage.includes('Your model is ready') && (
+            <button
+              onClick={() => window.open(colabUrl, '_blank')}
+              className="w-full px-3 py-1.5 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600"
+            >
+              Open Google Colab
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Debug info for development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="hidden">
+          <pre id="auth-debug-info">
+            {JSON.stringify({
+              isLoggedIn,
+              userEmail,
+              hasAuthPopup: !!authPopup,
+              popupClosed: authPopup ? authPopup.closed : null,
+              colabUrl,
+              isUploading
+            }, null, 2)}
+          </pre>
         </div>
       )}
 
