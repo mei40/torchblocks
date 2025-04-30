@@ -23,23 +23,18 @@ async function generateAuthInfo() {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    // Get the current host from the request headers
+    // This allows the redirect URI to work with any port
+    const currentHost = request.headers.get('X-Current-Host') || 'localhost:3000';
+    
     // Path to the authinfo.json file
     const projectRoot = path.resolve(process.cwd(), '../');
     const authInfoPath = path.join(projectRoot, 'backend', 'google', 'build', 'authinfo.json');
     
-    // Check if we need to generate the auth info
-    // if (!fs.existsSync(authInfoPath)) {
-    //   const generated = await generateAuthInfo();
-    //   if (!generated) {
-    //     console.log('Could not generate auth info file');
-    //   }
-    // }
-    
-    // If file still doesn't exist, return placeholders
+    // If file doesn't exist, create a skeleton authinfo.json file
     if (!fs.existsSync(authInfoPath)) {
-      // Create a skeleton authinfo.json file
       const skeletonContent = JSON.stringify({
         "auth_link": "",
         "auth_code": "",
@@ -85,15 +80,17 @@ export async function GET() {
         scope = 'https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.file';
       }
       
-      // Create a new valid auth URL using the root path as redirect URI
-      const validAuthUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2F&scope=${scope}&access_type=offline&response_type=code`;
-
+      // Create a new valid auth URL using dynamic host
+      // Encode the currentHost properly for the redirect_uri parameter
+      const encodedHost = encodeURIComponent(`http://${currentHost}/`);
+      const validAuthUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${encodedHost}&scope=${scope}&access_type=offline&response_type=code`;
+      
       console.log('Generated valid auth URL:', validAuthUrl);
-
+      
       // Update the authinfo.json file with the new URL to ensure backend scripts use it
       authInfo.auth_link = validAuthUrl;
       fs.writeFileSync(authInfoPath, JSON.stringify(authInfo, null, 2));
-          
+      
       return NextResponse.json({
         authUrl: validAuthUrl,
         colabUrl: colabUrl || 'https://colab.research.google.com/placeholder-notebook-url-will-be-here'
@@ -128,8 +125,9 @@ export async function GET() {
         scope = 'https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.file';
       }
       
-      // Create a new valid auth URL
-      const validAuthUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fgoogle%2Foauth-callback&scope=${scope}&access_type=offline&response_type=code`;
+      // Create a new valid auth URL with dynamic host
+      const encodedHost = encodeURIComponent(`http://${currentHost}/`);
+      const validAuthUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=${encodedHost}&scope=${scope}&access_type=offline&response_type=code`;
       
       console.log('Generated valid auth URL from raw content:', validAuthUrl);
       

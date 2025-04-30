@@ -302,9 +302,18 @@ const handleGoogleSignIn = async () => {
   }
   
   try {
+    // Get current host for checking redirects (works with any port)
+    const currentHost = window.location.host; // e.g. "localhost:3000" or "localhost:3001"
+    debugLog(`Current host: ${currentHost}`);
+    
     // Fetch authentication information from the backend
     debugLog("Fetching auth info from backend");
-    const response = await fetch('/api/google/auth-info');
+    const response = await fetch('/api/google/auth-info', {
+      // Include current host so the backend can set the correct redirect URI
+      headers: {
+        'X-Current-Host': currentHost
+      }
+    });
     
     if (!response.ok) {
       throw new Error('Failed to fetch authentication information');
@@ -363,7 +372,8 @@ const handleGoogleSignIn = async () => {
         debugLog(`Popup URL: ${popupUrl}`);
         
         // If we're back on our domain and have a code parameter
-        if (popupUrl.includes('localhost:3000') && popupUrl.includes('code=')) {
+        // Using currentHost instead of hardcoded "localhost:3000"
+        if (popupUrl.includes(currentHost) && popupUrl.includes('code=')) {
           debugLog("Detected auth code in popup URL");
           clearInterval(popupCheckInterval);
           
