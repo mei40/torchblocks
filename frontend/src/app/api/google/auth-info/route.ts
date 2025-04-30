@@ -85,15 +85,15 @@ export async function GET() {
         scope = 'https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fdrive.file';
       }
       
-      // Create a new valid auth URL
+      // Create a new valid auth URL using the root path as redirect URI
       const validAuthUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2F&scope=${scope}&access_type=offline&response_type=code`;
-      
+
       console.log('Generated valid auth URL:', validAuthUrl);
-      
+
       // Update the authinfo.json file with the new URL to ensure backend scripts use it
       authInfo.auth_link = validAuthUrl;
       fs.writeFileSync(authInfoPath, JSON.stringify(authInfo, null, 2));
-      
+          
       return NextResponse.json({
         authUrl: validAuthUrl,
         colabUrl: colabUrl || 'https://colab.research.google.com/placeholder-notebook-url-will-be-here'

@@ -21,6 +21,53 @@ export const Header = () => {
     console.log(`[Auth Debug] ${message}`);
   };
 
+  useEffect(() => {
+    const checkRedirectCode = () => {
+      // This gets triggered when the user is redirected back from Google
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      
+      if (code) {
+        console.log('Authentication code detected in URL - Google redirect successful');
+        
+        // Clean the URL to remove the code
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Call the verify-auth API with the code
+        fetch('/api/google/verify-auth', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ code }),
+        })
+        .then(response => response.json())
+        .then(result => {
+          if (result.success) {
+            // Set logged in state
+            setIsLoggedIn(true);
+            setUserEmail(result.email || 'user@torchblocks.com');
+            setNotificationMessage(`Signed in as ${result.email || 'user@torchblocks.com'}`);
+            setShowNotification(true);
+            setTimeout(() => setShowNotification(false), 5000);
+          } else {
+            setNotificationMessage('Authentication failed. Please try again.');
+            setShowNotification(true);
+            setTimeout(() => setShowNotification(false), 5000);
+          }
+        })
+        .catch(error => {
+          console.error('Error verifying auth code:', error);
+          setNotificationMessage('Authentication error. Please try again.');
+          setShowNotification(true);
+          setTimeout(() => setShowNotification(false), 5000);
+        });
+      }
+    };
+    
+    checkRedirectCode();
+  }, []);
+
   // Listen for messages from the authentication popup
   useEffect(() => {
     debugLog("Setting up message event listener");
@@ -28,45 +75,51 @@ export const Header = () => {
     const handleAuthMessage = (event: MessageEvent) => {
       debugLog(`Received message: ${JSON.stringify(event.data)}`);
       
-      if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
-        debugLog("Auth success message received");
-        setIsLoggedIn(true);
-        setUserEmail(event.data.email || 'user@torchblocks.com');
+      // Handle the new AUTH_CODE_RECEIVED message type
+      if (event.data?.type === 'AUTH_CODE_RECEIVED') {
+        debugLog("Auth code received message");
         
-        // Save Colab URL if available
-        if (event.data.colabUrl) {
-          setColabUrl(event.data.colabUrl);
-          setNotificationMessage(`Signed in as ${event.data.email || 'user@torchblocks.com'}. Google Colab is ready.`);
-        } else {
-          setNotificationMessage(`Signed in as ${event.data.email || 'user@torchblocks.com'}`);
+        // Verify the auth code with the backend
+        const code = event.data.code;
+        if (code) {
+          fetch('/api/google/verify-auth', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ code }),
+          })
+          .then(response => response.json())
+          .then(result => {
+            if (result.success) {
+              setIsLoggedIn(true);
+              setUserEmail(result.email || 'user@torchblocks.com');
+              
+              setNotificationMessage(`Signed in as ${result.email || 'user@torchblocks.com'}`);
+              setShowNotification(true);
+              setTimeout(() => setShowNotification(false), 5000);
+            } else {
+              setNotificationMessage(`Authentication failed: ${result.error || 'Unknown error'}`);
+              setShowNotification(true);
+              setTimeout(() => setShowNotification(false), 5000);
+            }
+          })
+          .catch(error => {
+            console.error('Error verifying auth code:', error);
+            setNotificationMessage('Authentication error. Please try again.');
+            setShowNotification(true);
+            setTimeout(() => setShowNotification(false), 5000);
+          });
         }
-        
-        setShowNotification(true);
-        
-        // Close the popup if it's still open
-        if (authPopup && !authPopup.closed) {
-          debugLog("Closing auth popup from event handler");
-          authPopup.close();
-          setAuthPopup(null);
-        }
-        
-        setTimeout(() => setShowNotification(false), 5000);
+      }
+      // Keep your existing message handling for GOOGLE_AUTH_SUCCESS and GOOGLE_AUTH_ERROR
+      else if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+        // Your existing code...
       } else if (event.data?.type === 'GOOGLE_AUTH_ERROR') {
-        debugLog(`Auth error message received: ${event.data.error}`);
-        setNotificationMessage(`Authentication error: ${event.data.error || 'Unknown error'}`);
-        setShowNotification(true);
-        
-        // Close the popup if it's still open
-        if (authPopup && !authPopup.closed) {
-          debugLog("Closing auth popup after error");
-          authPopup.close();
-          setAuthPopup(null);
-        }
-        
-        setTimeout(() => setShowNotification(false), 5000);
+        // Your existing code...
       }
     };
-
+  
     window.addEventListener('message', handleAuthMessage);
     debugLog("Message event listener added");
     
@@ -74,8 +127,8 @@ export const Header = () => {
       window.removeEventListener('message', handleAuthMessage);
       debugLog("Message event listener removed");
     };
-  }, [authPopup]);
-
+  }, [authPopup]);  // Keep any dependencies you already have
+  
   // Check if popup is closed
   useEffect(() => {
     if (authPopup) {
@@ -182,15 +235,24 @@ export const Header = () => {
   
   // Function to check for Colab link
   const startCheckingForColabLink = () => {
+    let checkCount = 0;
+    const maxChecks = 24; // Check for up to 2 minutes (24 * 5 seconds)
+    
     const checkInterval = setInterval(async () => {
       try {
+        checkCount++;
+        
         // Fetch the latest auth info
         const response = await fetch('/api/google/auth-info');
         const authInfo = await response.json();
         
-        if (authInfo.colabUrl && authInfo.colabUrl !== colabUrl && 
-            !authInfo.colabUrl.includes('placeholder-notebook-url-will-be-here')) {
-          // We have a new Colab URL
+        console.log(`Checking for Colab link (attempt ${checkCount}/${maxChecks}):`, authInfo.colabUrl);
+        
+        if (authInfo.colabUrl && 
+            authInfo.colabUrl !== colabUrl && 
+            !authInfo.colabUrl.includes('placeholder') &&
+            authInfo.colabUrl.includes('colab.research.google.com')) {
+          // We have a valid Colab URL
           setColabUrl(authInfo.colabUrl);
           setIsUploading(false);
           setNotificationMessage('Your model is ready in Google Colab!');
@@ -198,279 +260,186 @@ export const Header = () => {
           
           // Stop checking once we have the URL
           clearInterval(checkInterval);
+          
+          // Automatically open the Colab link in a new tab
+          window.open(authInfo.colabUrl, '_blank');
+        }
+        
+        // Stop after maximum number of attempts
+        if (checkCount >= maxChecks) {
+          clearInterval(checkInterval);
+          if (isUploading) {
+            setIsUploading(false);
+            setNotificationMessage('Colab link generation timed out or failed. Please check console logs and verify authentication configuration.');
+            setShowNotification(true);
+          }
         }
       } catch (error) {
         console.error('Error checking for Colab link:', error);
+        
+        // If too many consecutive errors, stop checking
+        if (checkCount >= 3) {
+          clearInterval(checkInterval);
+          setIsUploading(false);
+          setNotificationMessage('Error while checking for Colab link. Please try again.');
+          setShowNotification(true);
+        }
       }
     }, 5000); // Check every 5 seconds
-    
-    // Stop checking after 2 minutes (to prevent infinite checking)
-    setTimeout(() => {
-      clearInterval(checkInterval);
-      if (isUploading) {
-        setIsUploading(false);
-        setNotificationMessage('Colab link generation timed out or failed. Please check console logs and verify SkeletonAuth.json exists.');
-        setShowNotification(true);
-      }
-    }, 2 * 60 * 1000); 
-  }
+  };
+  
+// This is a modified version of the handleGoogleSignIn function in Header.tsx
+// Replace your existing function with this one
 
-  const handleGoogleSignIn = async () => {
-    debugLog("Google Sign In button clicked");
+const handleGoogleSignIn = async () => {
+  debugLog("Google Sign In button clicked");
+  
+  // If a popup is already open, focus it instead of opening a new one
+  if (authPopup && !authPopup.closed) {
+    debugLog("Auth popup already open, focusing it");
+    authPopup.focus();
+    return;
+  }
+  
+  try {
+    // Fetch authentication information from the backend
+    debugLog("Fetching auth info from backend");
+    const response = await fetch('/api/google/auth-info');
     
-    // If a popup is already open, focus it instead of opening a new one
-    if (authPopup && !authPopup.closed) {
-      debugLog("Auth popup already open, focusing it");
-      authPopup.focus();
+    if (!response.ok) {
+      throw new Error('Failed to fetch authentication information');
+    }
+    
+    const authInfo = await response.json();
+    debugLog(`Auth Info received: ${JSON.stringify(authInfo)}`);
+    
+    // Only continue if we have a valid auth URL that's not the placeholder
+    if (!authInfo.authUrl || authInfo.authUrl.includes('placeholder-auth-url-will-be-here')) {
+      debugLog("Invalid or placeholder auth URL received");
+      setNotificationMessage('Authentication information not available. Please try again later.');
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 5000);
       return;
     }
     
-    try {
-      // Fetch authentication information from the backend
-      debugLog("Fetching auth info from backend");
-      const response = await fetch('/api/google/auth-info');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch authentication information');
-      }
-      
-      const authInfo = await response.json();
-      debugLog(`Auth Info received: ${JSON.stringify(authInfo)}`);
-      
-      // Only continue if we have a valid auth URL that's not the placeholder
-      if (!authInfo.authUrl || authInfo.authUrl.includes('placeholder-auth-url-will-be-here')) {
-        debugLog("Invalid or placeholder auth URL received");
-        setNotificationMessage('Authentication information not available. Please try again later.');
-        setShowNotification(true);
-        setTimeout(() => setShowNotification(false), 5000);
-        return;
-      }
-      
-      // Open popup window with dimensions
-      const width = 600;
-      const height = 700;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
-      
-      debugLog("Opening auth popup window");
-      
-      // Open the auth URL directly in the popup
-      const popup = window.open(
-        authInfo.authUrl,
-        'Google Sign In',
-        `toolbar=no, menubar=no, width=${width}, height=${height}, top=${top}, left=${left}`
-      );
-      
-      if (!popup) {
-        debugLog("Popup was blocked");
-        alert('Popup blocked by browser. Please enable popups for this site.');
-        return;
-      }
-      
-      debugLog("Auth popup created successfully");
-      setAuthPopup(popup);
-      
-      // Set up a fallback mechanism if the popup doesn't redirect properly
-      setTimeout(() => {
-        if (popup && !popup.closed) {
-          debugLog("Checking if auth popup needs manual code entry");
+    // Open popup window with dimensions
+    const width = 600;
+    const height = 700;
+    const left = window.screen.width / 2 - width / 2;
+    const top = window.screen.height / 2 - height / 2;
+    
+    debugLog("Opening auth popup window");
+    
+    // Open the auth URL directly in the popup
+    const popup = window.open(
+      authInfo.authUrl,
+      'Google Sign In',
+      `toolbar=no, menubar=no, width=${width}, height=${height}, top=${top}, left=${left}`
+    );
+    
+    if (!popup) {
+      debugLog("Popup was blocked");
+      alert('Popup blocked by browser. Please enable popups for this site.');
+      return;
+    }
+    
+    debugLog("Auth popup created successfully");
+    setAuthPopup(popup);
+    
+    // Need to check for redirect code
+    // This interval checks the URL of the popup to detect when Google redirects back to our site
+    const popupCheckInterval = setInterval(() => {
+      try {
+        // This will throw an error if popup is on a different domain due to same-origin policy
+        if (popup.closed) {
+          debugLog("Popup closed");
+          clearInterval(popupCheckInterval);
+          setAuthPopup(null);
+          return;
+        }
+        
+        // Check if we can access the popup location
+        const popupUrl = popup.location.href;
+        debugLog(`Popup URL: ${popupUrl}`);
+        
+        // If we're back on our domain and have a code parameter
+        if (popupUrl.includes('localhost:3000') && popupUrl.includes('code=')) {
+          debugLog("Detected auth code in popup URL");
+          clearInterval(popupCheckInterval);
           
-          try {
-            // Only add this if the popup is on our domain or hasn't navigated away
-            // This might fail with cross-origin restrictions
-            const currentUrl = popup.location.href;
+          // Extract the code from URL
+          const url = new URL(popupUrl);
+          const code = url.searchParams.get('code');
+          
+          if (code) {
+            debugLog(`Extracted auth code: ${code}`);
             
-            // If still on about:blank or at Google OAuth page
-            if (currentUrl.includes('accounts.google.com') || currentUrl === 'about:blank') {
-              debugLog("Popup appears to be stuck, switching to manual entry mode");
-              
-              // Switch to manual entry mode
-              popup.close();
-              
-              // Open a new popup with manual entry UI
-              const manualPopup = window.open(
-                'about:blank',
-                'Google Sign In',
-                `toolbar=no, menubar=no, width=${width}, height=${height}, top=${top}, left=${left}`
-              );
-              
-              if (!manualPopup) {
-                alert('Popup blocked by browser. Please enable popups for this site.');
-                return;
-              }
-              
-              setAuthPopup(manualPopup);
-              
-              // Write manual entry UI to the popup
-              manualPopup.document.write(`
-                <html>
-                  <head>
-                    <title>Google Authentication</title>
-                    <style>
-                      body {
-                        font-family: Arial, sans-serif;
-                        padding: 20px;
-                        text-align: center;
-                        background-color: #f7f9fc;
-                        line-height: 1.6;
-                      }
-                      .container {
-                        max-width: 450px;
-                        margin: 0 auto;
-                        background: white;
-                        padding: 30px;
-                        border-radius: 8px;
-                        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-                      }
-                      h2 {
-                        color: #333;
-                        margin-bottom: 20px;
-                      }
-                      p {
-                        margin-bottom: 20px;
-                        color: #555;
-                      }
-                      .important {
-                        background-color: #fffde7;
-                        border-left: 4px solid #fbc02d;
-                        padding: 15px;
-                        margin: 20px 0;
-                        text-align: left;
-                      }
-                      .auth-code-section {
-                        margin-top: 30px;
-                      }
-                      input {
-                        width: 100%;
-                        padding: 10px;
-                        font-size: 16px;
-                        margin-bottom: 15px;
-                        border: 1px solid #ddd;
-                        border-radius: 4px;
-                      }
-                      button {
-                        background-color: #4285f4;
-                        color: white;
-                        border: none;
-                        padding: 12px 20px;
-                        font-size: 16px;
-                        border-radius: 4px;
-                        cursor: pointer;
-                      }
-                      button:hover {
-                        background-color: #357ae8;
-                      }
-                      .error-message {
-                        color: #d23f31;
-                        margin-top: 15px;
-                      }
-                    </style>
-                  </head>
-                  <body>
-                    <div class="container">
-                      <h2>Manual Authentication</h2>
-                      
-                      <div id="step1">
-                        <p>It seems the automatic redirect didn't work. Please follow these steps:</p>
-                        
-                        <div class="important">
-                          <p><strong>1.</strong> If the Google authentication page is still open in another window, complete the authorization there.</p>
-                          <p><strong>2.</strong> After authorizing, Google will display a code. Copy that code and paste it below.</p>
-                        </div>
-                        
-                        <div class="auth-code-section">
-                          <input 
-                            type="text" 
-                            id="authCode" 
-                            placeholder="Paste authorization code here" 
-                          />
-                          <button id="submitCode">Submit</button>
-                          <div id="errorMessage" class="error-message"></div>
-                        </div>
-                      </div>
-                      
-                      <div id="step2" style="display: none;">
-                        <p>Verifying authentication code...</p>
-                        <div style="border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 2s linear infinite; margin: 20px auto;"></div>
-                        <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-                      </div>
-                      
-                      <div id="step3" style="display: none;">
-                        <p>Authentication successful!</p>
-                        <p>This window will close automatically.</p>
-                      </div>
-                    </div>
-                    
-                    <script>
-                      document.getElementById('submitCode').addEventListener('click', async function() {
-                        const authCode = document.getElementById('authCode').value.trim();
-                        
-                        if (!authCode) {
-                          document.getElementById('errorMessage').textContent = 'Please enter the authentication code';
-                          return;
-                        }
-                        
-                        document.getElementById('step1').style.display = 'none';
-                        document.getElementById('step2').style.display = 'block';
-                        
-                        try {
-                          // Verify the authentication code with the backend
-                          const response = await fetch('/api/google/verify-auth', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ code: authCode }),
-                          });
-                          
-                          if (!response.ok) {
-                            throw new Error('Invalid authentication code');
-                          }
-                          
-                          const result = await response.json();
-                          
-                          // Show success message
-                          document.getElementById('step2').style.display = 'none';
-                          document.getElementById('step3').style.display = 'block';
-                          
-                          // Notify the parent window of successful authentication
-                          window.opener.postMessage({ type: 'GOOGLE_AUTH_SUCCESS', email: result.email || 'user@torchblocks.com' }, '*');
-                          
-                          // Close this popup after a brief delay
-                          setTimeout(() => {
-                            window.close();
-                          }, 2000);
-                          
-                        } catch (error) {
-                          document.getElementById('step1').style.display = 'block';
-                          document.getElementById('step2').style.display = 'none';
-                          document.getElementById('errorMessage').textContent = error.message || 'Authentication failed. Please try again.';
-                        }
-                      });
-                    </script>
-                  </body>
-                </html>
-              `);
-            }
-          } catch (e) {
-            // Catch cross-origin errors when trying to access popup location
-            debugLog("Cross-origin restriction error - can't check popup location");
+            // Close the popup immediately to prevent UI flicker
+            popup.close();
+            setAuthPopup(null);
+            
+            // Send the code to backend
+            verifyAuthCode(code);
           }
         }
-      }, 30000); // 30 seconds timeout for auto-redirect
-      
-    } catch (error) {
-      debugLog(`Authentication error: ${error}`);
-      console.error('Authentication error:', error);
-      if (authPopup) {
-        authPopup.close();
-        setAuthPopup(null);
+      } catch (e) {
+        // Access to popup location is restricted while on Google domain
+        // This is normal due to cross-origin restrictions
+        // We just wait until the popup returns to our domain
       }
-      setNotificationMessage('Authentication failed. Please try again.');
+    }, 100); // Check more frequently to catch the redirect faster
+    
+  } catch (error) {
+    debugLog(`Authentication error: ${error}`);
+    console.error('Authentication error:', error);
+    if (authPopup) {
+      authPopup.close();
+      setAuthPopup(null);
+    }
+    setNotificationMessage('Authentication failed. Please try again.');
+    setShowNotification(true);
+    setTimeout(() => setShowNotification(false), 5000);
+  }
+};
+
+// Add this function to handle the auth code verification if it doesn't exist
+const verifyAuthCode = async (code: string) => {
+  try {
+    debugLog(`Verifying auth code: ${code}`);
+    
+    const response = await fetch('/api/google/verify-auth', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code }),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to verify authentication code');
+    }
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      debugLog("Auth code verification successful");
+      setIsLoggedIn(true);
+      setUserEmail(result.email || 'user@torchblocks.com');
+      
+      setNotificationMessage(`Signed in as ${result.email || 'user@torchblocks.com'}`);
       setShowNotification(true);
       setTimeout(() => setShowNotification(false), 5000);
+    } else {
+      throw new Error(result.error || 'Authentication verification failed');
     }
-  };
+  } catch (error) {
+    debugLog(`Auth code verification error: ${error}`);
+    console.error('Authentication verification error:', error);
+    setNotificationMessage(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    setShowNotification(true);
+    setTimeout(() => setShowNotification(false), 5000);
+  }
+};
 
   const handleSignOut = () => {
     setIsLoggedIn(false);
