@@ -51,25 +51,52 @@ MAIN_FOLDER = "torchblocks"
 TITLE = "PrimaryModel.ipynb"
 DESCRIPTION = "Main Jupyter Notebook"
 
-with open(AUTHINFO_SKELETON, "rb") as auth_fp:
+with open(AUTHINFO_FILE, "rb") as auth_fp:
     self_authinfo = json.load(auth_fp)
 
 # Perform OAuth2.0 authorization flow.
-flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRETS, OAUTH2_SCOPE)
-flow.redirect_uri = oauth2client.client.OOB_CALLBACK_URN
-authorize_url = flow.step1_get_authorize_url()
-self_authinfo["auth_link"] = authorize_url
-with open(AUTHINFO_FILE, "wb") as auth_fp:
-    auth_fp.write(json.dumps(self_authinfo).encode("utf-8"))
+# flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRETS, OAUTH2_SCOPE)
+# flow.redirect_uri = "http://localhost:3000/"
+# authorize_url = flow.step1_get_authorize_url()
+# print(authorize_url)
+# print(self_authinfo["auth_link"])
+# self_authinfo["auth_link"] = authorize_url
 code = ""
 while not code:
     with open(AUTHINFO_FILE, "rb") as auth_fp:
-        temp_authinfo = json.load(auth_fp)
-        code = temp_authinfo["auth_code"]
+        self_authinfo = json.load(auth_fp)
+        code = self_authinfo["auth_code"]
     if not code:
         time.sleep(1)
-self_authinfo["auth_code"] = code
-credentials = flow.step2_exchange(code)
+# self_authinfo["auth_code"] = code
+# credentials = flow.step2_exchange(code)
+
+# Extract the redirect URI from the auth_link in the authinfo.json file
+# for not relying only on localhost:3000
+try:
+    auth_link = self_authinfo.get("auth_link", "")
+    redirect_uri = "http://localhost:3000/"  # Default fallback
+    
+    # Try to extract the redirect_uri from the auth_link
+    if auth_link:
+        import re
+        redirect_match = re.search(r"redirect_uri=([^&]+)", auth_link)
+        if redirect_match:
+            import urllib.parse
+            redirect_uri = urllib.parse.unquote(redirect_match.group(1))
+            print(f"Found redirect URI in auth_link: {redirect_uri}")
+except Exception as e:
+    print(f"Error extracting redirect URI: {e}")
+    redirect_uri = "http://localhost:3000/"  # Fallback to default
+
+print(f"Using redirect URI: {redirect_uri}")
+
+credentials = oauth2client.client.credentials_from_clientsecrets_and_code(
+        CLIENT_SECRETS,
+        [OAUTH2_SCOPE],
+        code,
+        redirect_uri=redirect_uri
+    )
 
 # Create an authorized Drive API client.
 http = httplib2.Http()
