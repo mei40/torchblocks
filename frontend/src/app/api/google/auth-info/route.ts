@@ -30,20 +30,23 @@ export async function GET() {
     const authInfoPath = path.join(projectRoot, 'backend', 'google', 'build', 'authinfo.json');
     
     // Check if we need to generate the auth info
-    if (!fs.existsSync(authInfoPath)) {
-      const generated = await generateAuthInfo();
-      if (!generated) {
-        console.log('Could not generate auth info file');
-      }
-    }
+    // if (!fs.existsSync(authInfoPath)) {
+    //   const generated = await generateAuthInfo();
+    //   if (!generated) {
+    //     console.log('Could not generate auth info file');
+    //   }
+    // }
     
     // If file still doesn't exist, return placeholders
     if (!fs.existsSync(authInfoPath)) {
-      console.log('Auth info file not found at:', authInfoPath);
-      return NextResponse.json({
-        authUrl: 'https://accounts.google.com/o/oauth2/auth?placeholder-auth-url-will-be-here',
-        colabUrl: 'https://colab.research.google.com/placeholder-notebook-url-will-be-here'
-      });
+      // Create a skeleton authinfo.json file
+      const skeletonContent = JSON.stringify({
+        "auth_link": "",
+        "auth_code": "",
+        "colab_link": ""
+      }, null, 2);
+      fs.writeFileSync(authInfoPath, skeletonContent);
+      console.log(`Created missing file: ${authInfoPath}`);
     }
     
     // Read the file content
@@ -83,7 +86,7 @@ export async function GET() {
       }
       
       // Create a new valid auth URL
-      const validAuthUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fgoogle%2Foauth-callback&scope=${scope}&access_type=offline&response_type=code`;
+      const validAuthUrl = `https://accounts.google.com/o/oauth2/auth?client_id=${clientId}&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2F&scope=${scope}&access_type=offline&response_type=code`;
       
       console.log('Generated valid auth URL:', validAuthUrl);
       

@@ -51,25 +51,32 @@ MAIN_FOLDER = "torchblocks"
 TITLE = "PrimaryModel.ipynb"
 DESCRIPTION = "Main Jupyter Notebook"
 
-with open(AUTHINFO_SKELETON, "rb") as auth_fp:
+with open(AUTHINFO_FILE, "rb") as auth_fp:
     self_authinfo = json.load(auth_fp)
 
 # Perform OAuth2.0 authorization flow.
-flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRETS, OAUTH2_SCOPE)
-flow.redirect_uri = oauth2client.client.OOB_CALLBACK_URN
-authorize_url = flow.step1_get_authorize_url()
-self_authinfo["auth_link"] = authorize_url
-with open(AUTHINFO_FILE, "wb") as auth_fp:
-    auth_fp.write(json.dumps(self_authinfo).encode("utf-8"))
+# flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRETS, OAUTH2_SCOPE)
+# flow.redirect_uri = "http://localhost:3000/"
+# authorize_url = flow.step1_get_authorize_url()
+# print(authorize_url)
+# print(self_authinfo["auth_link"])
+# self_authinfo["auth_link"] = authorize_url
 code = ""
 while not code:
     with open(AUTHINFO_FILE, "rb") as auth_fp:
-        temp_authinfo = json.load(auth_fp)
-        code = temp_authinfo["auth_code"]
+        self_authinfo = json.load(auth_fp)
+        code = self_authinfo["auth_code"]
     if not code:
         time.sleep(1)
-self_authinfo["auth_code"] = code
-credentials = flow.step2_exchange(code)
+# self_authinfo["auth_code"] = code
+# credentials = flow.step2_exchange(code)
+
+credentials = oauth2client.client.credentials_from_clientsecrets_and_code(
+        CLIENT_SECRETS,
+        [OAUTH2_SCOPE],
+        code,
+        redirect_uri="http://localhost:3000/"
+    )
 
 # Create an authorized Drive API client.
 http = httplib2.Http()

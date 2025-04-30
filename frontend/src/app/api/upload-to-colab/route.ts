@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     const { modelFile = 'backend/google/build/PrimaryModel.ipynb' } = await request.json();
     
     const projectRoot = path.resolve(process.cwd(), '../');
-    const scriptPath = path.join(projectRoot, 'backend', 'google', 'file_uploader.py');
+    const scriptPath = path.resolve(process.cwd(), '../../torchblocks/backend/upload_files.sh');
     const filePath = path.join(projectRoot, modelFile);
     
     // Check if source files exist
@@ -65,12 +65,12 @@ export async function POST(request: Request) {
       }
     }
     
-    console.log(`Executing: python3 ${scriptPath} ${filePath}`);
+    console.log(`Executing: bash ${scriptPath}`);
     
     // Run the upload script (non-blocking)
     // We'll run this in the background and not wait for it to complete
     // as the script has a long-running loop at the end
-    exec(`python3 ${scriptPath} ${filePath}`, (error, stdout, stderr) => {
+    exec(`bash ${scriptPath}`, (error, stdout, stderr) => {
       if (error) {
         console.error(`Execution error: ${error.message}`);
         return;
