@@ -16,6 +16,19 @@ export const Header = () => {
   const [isUploading, setIsUploading] = useState(false);
   const { blocks, connections } = useStore();
 
+  // New state for Python installation
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [isInstallingPython, setIsInstallingPython] = useState(false);
+  const [pythonInstallLog, setPythonInstallLog] = useState<string[]>([]);
+  const [pythonInstallStatus, setPythonInstallStatus] = useState('');
+  const [pythonEnvInstalled, setPythonEnvInstalled] = useState(false); // To track if install was successful
+
+  // New state for running tests/model
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [runLog, setRunLog] = useState<string[]>([]);
+  const [runStatus, setRunStatus] = useState('');
+
   // Debug function to help trace message events
   const debugLog = (message: string) => {
     console.log(`[Auth Debug] ${message}`);
@@ -66,6 +79,27 @@ export const Header = () => {
     };
     
     checkRedirectCode();
+
+    // Listeners for Python installation
+    if (window.electronAPI) {
+      const handleProgress = (logMessage: string) => {
+        setPythonInstallLog(prev => [...prev, logMessage]);
+      };
+      const handleStatus = (statusMessage: string) => {
+        setPythonInstallStatus(statusMessage);
+      };
+
+      window.electronAPI.onInstallPythonEnvProgress(handleProgress);
+      window.electronAPI.onInstallPythonEnvStatus(handleStatus);
+
+      return () => {
+        // Clean up listeners - important for preventing memory leaks
+        // However, Electron's ipcRenderer.on doesn't return a remover function directly.
+        // For simplicity in this one-time setup, we might not explicitly remove if preload script uses ipcRenderer.on.
+        // If preload.js uses ipcRenderer.removeAllListeners('channel-name'), that's another way.
+        // For now, assuming preload setup is simple or handles this.
+      };
+    }
   }, []);
 
   // Listen for messages from the authentication popup
@@ -148,23 +182,147 @@ export const Header = () => {
     }
   }, [authPopup]);
 
-  const runTests = async () => {
+  // New handler for Python environment installation
+  const handleInstallPythonEnv = async () => {
+    if (!window.electronAPI) {
+      setPythonInstallStatus("Electron API not available. Are you running in Electron?");
+      setShowInstallModal(true);
+      return;
+    }
+    setShowInstallModal(true);
+    setIsInstallingPython(true);
+    setPythonInstallLog([]);
+    setPythonInstallStatus("Starting Python environment setup...");
+
     try {
-      // Call backend API to execute the shell script
-      const response = await fetch('/api/run-tests', {
-        method: 'POST',
-      });
-      
-      if (response.ok) {
-        setNotificationMessage('Test completed successfully');
+      const result = await window.electronAPI.installPythonEnv();
+      setPythonInstallStatus(result.message);
+      if (result.success) {
+        setNotificationMessage("Python environment setup complete!");
         setShowNotification(true);
-        // Auto-hide notification after 5 seconds
         setTimeout(() => setShowNotification(false), 5000);
+        setPythonEnvInstalled(true); // Mark as installed
       } else {
-        console.error('Failed to run tests');
+        setNotificationMessage("Python environment setup failed. Check logs.");
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 5000);
       }
+      setPythonInstallLog(prev => [...prev, `Final Log: ${result.log}`]);
     } catch (error) {
-      console.error('Error running tests:', error);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred";
+      setPythonInstallStatus(`Error: ${errorMessage}`);
+      setPythonInstallLog(prev => [...prev, `Error: ${errorMessage}`]);
+      setNotificationMessage("Python environment setup encountered an error.");
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 5000);
+    } finally {
+      setIsInstallingPython(false);
+      // setShowInstallModal(false); // Optionally keep modal open to show final logs
+    }
+  };
+
+  // useEffect for run compile/main listeners
+  useEffect(() => {
+    if (window.electronAPI) {
+      const handleCompileProgress = (logMessage: string) => {
+        setRunLog(prev => [...prev, `[COMPILE] ${logMessage}`]);
+      };
+      const handleCompileStatus = (statusMessage: string) => {
+        setRunStatus(`[COMPILE] ${statusMessage}`);
+      };
+      window.electronAPI.onCompileMainProgress(handleCompileProgress);
+      window.electronAPI.onCompileMainStatus(handleCompileStatus);
+
+      const handleRunMainProgress = (logMessage: string) => {
+        setRunLog(prev => [...prev, `[TRAIN] ${logMessage}`]);
+      };
+      const handleRunMainStatus = (statusMessage: string) => {
+        setRunStatus(`[TRAIN] ${statusMessage}`);
+      };
+      window.electronAPI.onRunMainProgress(handleRunMainProgress);
+      window.electronAPI.onRunMainStatus(handleRunMainStatus);
+
+      // Cleanup function for listeners (optional but good practice if possible)
+      return () => {
+        // ipcRenderer.removeAllListeners(...)
+      };
+    }
+  }, []);
+
+  const runTests = async () => {
+    if (!window.electronAPI) {
+      setNotificationMessage('Electron API not available. This function only works in Electron.');
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 5000);
+      // Optionally, run the old fetch-based version if not in Electron
+      // const response = await fetch('/api/run-tests', { method: 'POST' }); ...
+      return;
+    }
+
+    if (!pythonEnvInstalled) {
+      setNotificationMessage('Python environment not installed. Please install it first.');
+      setShowNotification(true);
+      setShowInstallModal(true); // Guide user to install
+      setTimeout(() => setShowNotification(false), 5000);
+      return;
+    }
+
+    setIsTesting(true);
+    setShowRunModal(true);
+    setRunLog([]);
+    setRunStatus('Starting test run...');
+
+    try {
+      // Step 1: Save the current model configuration
+      setRunStatus('Saving current model configuration...');
+      const saveResult = await handleSave(); 
+      console.log('[Header.tsx] runTests - saveResult:', JSON.stringify(saveResult, null, 2)); // DETAILED LOGGING
+      setRunLog(prev => [...prev, `[DEBUG] saveResult: ${JSON.stringify(saveResult)}`]); // Log to modal too
+
+      if (!saveResult.success) { 
+        throw new Error(`Failed to save model: ${saveResult.message}`);
+      }
+      // Crucially, check if the path exists on the saveResult.
+      if (!saveResult.path) {
+        console.error('[Header.tsx] runTests - saveResult.path is missing or falsy even though saveResult.success might be true.', saveResult);
+        throw new Error('Model saved, but no path was returned. Cannot proceed with compilation. Ensure Electron API is available and save was successful.');
+      }
+      const modelJsonAbsolutePath = saveResult.path; // This is the correct path to pass
+
+      setRunLog(prev => [...prev, `Model saved to: ${modelJsonAbsolutePath}`]);
+      setRunStatus('Model saved. Starting compilation...');
+
+      // Step 2: Run compile_main.py
+      // Pass the absolute path obtained from saveResult
+      setRunLog(prev => [...prev, `Calling runCompileMain with: ${modelJsonAbsolutePath}`]); 
+      const compileResult = await window.electronAPI.runCompileMain(modelJsonAbsolutePath);
+      setRunLog(prev => [...prev, `Compile Log: ${compileResult.log}`]);
+      if (!compileResult.success) {
+        throw new Error(`Compilation failed: ${compileResult.message}`);
+      }
+      setRunStatus('Compilation successful. Starting training...');
+
+      // Step 3: Run run_main.py (e.g., with 2 epochs)
+      const trainResult = await window.electronAPI.runRunMain(2); // Or get epochs from UI
+      setRunLog(prev => [...prev, `Train Log: ${trainResult.log}`]);
+      if (!trainResult.success) {
+        throw new Error(`Training failed: ${trainResult.message}`);
+      }
+      setRunStatus('Training successful. Test run complete.');
+      setNotificationMessage('Test run completed successfully!');
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 5000);
+      // TODO: Add logic to fetch and display results from local_results.json if needed
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred during test run';
+      setRunStatus(`Error: ${errorMessage}`);
+      setRunLog(prev => [...prev, `ERROR: ${errorMessage}`]);
+      setNotificationMessage('Test run failed. Check logs.');
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 5000);
+    } finally {
+      setIsTesting(false);
     }
   };
 
@@ -187,11 +345,12 @@ export const Header = () => {
     downloadNetworkJson(blocks, connections, 'torchblocks_model.json');
   };
   
-  const handleSave = async () => {
+  const handleSave = async (): Promise<{ success: boolean; message: string; path?: string }> => {
     const result = await saveNetworkJsonToServer(blocks, connections, 'model.json');
     setNotificationMessage(result.message);
     setShowNotification(true);
     setTimeout(() => setShowNotification(false), 5000);
+    return result;
   };
 
   const handleUploadToColab = async () => {
@@ -455,10 +614,10 @@ const verifyAuthCode = async (code: string) => {
     setIsLoggedIn(false);
     setUserEmail('');
     setColabUrl('');
-    setIsUploading(false);
-    setNotificationMessage('Signed out successfully');
+    setNotificationMessage('Signed out successfully.');
     setShowNotification(true);
-    setTimeout(() => setShowNotification(false), 5000);
+    setTimeout(() => setShowNotification(false), 3000);
+    // TODO: Add actual sign-out logic if there's a backend session to clear
   };
 
   return (
@@ -466,6 +625,16 @@ const verifyAuthCode = async (code: string) => {
       <div className="h-full px-4 flex items-center justify-between">
         <h1 className="text-xl font-semibold">TorchBlocks</h1>
         <div className="flex items-center space-x-4">
+          {/* Install Python Backend Button */}
+          {!pythonEnvInstalled && (
+            <button
+              onClick={handleInstallPythonEnv}
+              disabled={isInstallingPython}
+              className="px-4 py-2 text-sm bg-green-500 text-white rounded-md hover:bg-green-600"
+            >
+              {isInstallingPython ? 'Installing Python...' : 'Install Python Backend (One-Time)'}
+            </button>
+          )}
           {isLoggedIn ? (
             <div className="flex items-center space-x-2">
               <span className="text-sm text-gray-600">{userEmail}</span>
@@ -526,9 +695,10 @@ const verifyAuthCode = async (code: string) => {
           )}
           <button 
             onClick={runTests}
-            className="px-4 py-2 text-sm bg-green-500 text-white rounded-md hover:bg-green-600"
+            disabled={isTesting || isInstallingPython}
+            className="px-4 py-2 text-sm bg-green-500 text-white rounded-md hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Run Test
+            {isTesting ? 'Running Tests...' : 'Run Test'}
           </button>
           <button 
             onClick={handleSave}
@@ -618,6 +788,56 @@ const verifyAuthCode = async (code: string) => {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Python Installation Modal */}
+      {showInstallModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-30">
+          <div className="bg-gray-800 text-white p-6 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-xl font-semibold">Python Environment Setup</h2>
+              <button 
+                onClick={() => setShowInstallModal(false)} 
+                className="text-gray-400 hover:text-white text-2xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+            <p className="mb-1 text-gray-300">Status: <span className="font-semibold text-yellow-400">{pythonInstallStatus}</span></p>
+            {isInstallingPython && <div className="w-full bg-gray-700 rounded-full h-2.5 mb-3"><div className="bg-blue-500 h-2.5 rounded-full animate-pulse"></div></div>}
+            <div className="flex-grow bg-gray-900 p-3 rounded overflow-y-auto text-sm font-mono mb-3">
+              <h3 className="text-gray-400 mb-1">Installation Log:</h3>
+              {pythonInstallLog.map((line, index) => (
+                <div key={index} className="whitespace-pre-wrap">{line}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Run Model/Test Modal */}
+      {showRunModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-30">
+          <div className="bg-gray-800 text-white p-6 rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-xl font-semibold">Running Model / Tests</h2>
+              <button 
+                onClick={() => setShowRunModal(false)} 
+                className="text-gray-400 hover:text-white text-2xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+            <p className="mb-1 text-gray-300">Status: <span className="font-semibold text-yellow-400">{runStatus}</span></p>
+            {isTesting && <div className="w-full bg-gray-700 rounded-full h-2.5 mb-3"><div className="bg-blue-500 h-2.5 rounded-full animate-pulse"></div></div>}
+            <div className="flex-grow bg-gray-900 p-3 rounded overflow-y-auto text-sm font-mono mb-3">
+              <h3 className="text-gray-400 mb-1">Run Log:</h3>
+              {runLog.map((line, index) => (
+                <div key={index} className="whitespace-pre-wrap">{line}</div>
+              ))}
             </div>
           </div>
         </div>

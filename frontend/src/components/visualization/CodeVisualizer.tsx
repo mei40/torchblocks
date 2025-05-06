@@ -54,6 +54,7 @@ const CodeVisualizer: React.FC = () => {
   const [modelCode, setModelCode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>('');
   const [showLineNumbers, setShowLineNumbers] = useState(true);
   const [fontSize, setFontSize] = useState(14);
   const [isDarkTheme, setIsDarkTheme] = useState(true);
@@ -96,22 +97,56 @@ const CodeVisualizer: React.FC = () => {
     const fetchCode = async () => {
       setIsLoading(true);
       setError(null);
+      setStatusMessage('Initializing...');
+
       try {
-        const response = await fetch('/api/get-model-code');
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        let codeContent: string | null = null;
+        let success = false;
+        let fetchError: string | undefined = undefined;
+
+        if (window.electronAPI) {
+          setStatusMessage('Fetching model code via Electron API...');
+          const ipcResult = await window.electronAPI.getModelCode();
+          success = ipcResult.success;
+          codeContent = ipcResult.code;
+          fetchError = ipcResult.error;
+          if (!success) {
+            throw new Error(fetchError || 'Failed to get model code via IPC');
+          }
+        } else {
+          setStatusMessage('Fetching model code via HTTP API...');
+          const response = await fetch('/api/get-model-code');
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+          }
+          const data = await response.json();
+          codeContent = data.code;
+          success = true; // Assuming fetch success
         }
-        const data = await response.json();
-        setModelCode(data.code);
+
+        if (success && codeContent) {
+          setModelCode(codeContent);
+          setStatusMessage('Model code loaded.');
+        } else if (!success && fetchError) {
+          throw new Error(fetchError);
+        }
+
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to fetch model code');
+        const errorMessage = e instanceof Error ? e.message : 'Failed to fetch model code';
+        setError(errorMessage);
+        setStatusMessage(`Error: ${errorMessage}`);
         console.error('Fetch error:', e);
       }
       setIsLoading(false);
     };
 
     fetchCode();
+
+    // Listener for status updates (optional)
+    if (window.electronAPI && window.electronAPI.onModelCodeStatus) {
+      window.electronAPI.onModelCodeStatus(setStatusMessage);
+    }
   }, []);
 
   const renderLibraryDocs = () => {
@@ -211,6 +246,9 @@ const CodeVisualizer: React.FC = () => {
     );
   };
 
+  if (isLoading) return <div className="text-center p-4">{statusMessage || 'Loading code...'}</div>;
+  if (error) return <div className="text-center p-4 text-red-500">Error: {statusMessage || error}</div>;
+
   return (
     <div className={`w-full h-full flex flex-col ${isDarkTheme ? 'bg-gray-900' : 'bg-white'} text-white`}>
       {/* Controls Panel */}
@@ -264,8 +302,6 @@ const CodeVisualizer: React.FC = () => {
 
       {/* Code Display */}
       <div className="flex-1 overflow-auto p-4 relative">
-        {isLoading && <div className="text-center p-4">Loading code...</div>}
-        {error && <div className="text-center p-4 text-red-500">Error: {error}</div>}
         {modelCode && (
           <div className="relative">
             <SyntaxHighlighter

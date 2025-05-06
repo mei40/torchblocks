@@ -9,6 +9,7 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
+import { ResultsData } from '../../../electron.d';
 
 interface DataPoint {
   epoch: number;
@@ -16,51 +17,77 @@ interface DataPoint {
   accuracy: number;
 }
 
-interface ResultsData {
-  losses: [number, number][];
-  accuracies: [number, number][];
-}
-
 const TestResultsView: React.FC = () => {
   const [chartData, setChartData] = useState<DataPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>('');
 
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
+      setStatusMessage('Initializing...');
+
       try {
-        const response = await fetch('/api/get-test-results');
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        let results: ResultsData | null = null;
+        let success = false;
+        let fetchError: string | undefined = undefined;
+
+        if (window.electronAPI) {
+          setStatusMessage('Fetching results via Electron API...');
+          const ipcResult = await window.electronAPI.getTestResults();
+          success = ipcResult.success;
+          results = ipcResult.data;
+          fetchError = ipcResult.error;
+          if (!success) {
+            throw new Error(fetchError || 'Failed to get test results via IPC');
+          }
+        } else {
+          setStatusMessage('Fetching results via HTTP API...');
+          const response = await fetch('/api/get-test-results');
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+          }
+          results = await response.json() as ResultsData;
+          success = true;
         }
-        const results: ResultsData = await response.json();
 
-        // Process data for recharts
-        const processedData: DataPoint[] = results.losses.map((lossPoint, index) => {
-          const accuracyPoint = results.accuracies[index] || [lossPoint[0], 0]; // Handle potential mismatch
-          return {
-            epoch: parseFloat(lossPoint[0].toFixed(2)), // Use epoch from loss data, format
-            loss: lossPoint[1],
-            accuracy: accuracyPoint[1],
-          };
-        });
+        if (success && results) {
+          const processedData: DataPoint[] = results.losses.map((lossPoint: [number, number], index: number) => {
+            const accuracyPoint = results.accuracies[index] || [lossPoint[0], 0];
+            return {
+              epoch: parseFloat(lossPoint[0].toFixed(2)),
+              loss: lossPoint[1],
+              accuracy: accuracyPoint[1],
+            };
+          });
+          setChartData(processedData);
+          setStatusMessage('Results loaded.');
+        } else if (!success && fetchError) {
+          throw new Error(fetchError);
+        }
 
-        setChartData(processedData);
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load test results');
+        const errorMessage = e instanceof Error ? e.message : 'Failed to load test results';
+        setError(errorMessage);
+        setStatusMessage(`Error: ${errorMessage}`);
         console.error('Fetch error:', e);
       }
       setIsLoading(false);
     };
 
     fetchData();
+
+    if (window.electronAPI && window.electronAPI.onTestResultsStatus) {
+      window.electronAPI.onTestResultsStatus(setStatusMessage);
+    }
+
   }, []);
 
   if (isLoading) {
-    return <div className="w-full h-full flex items-center justify-center"><p className="text-gray-500">Loading test results...</p></div>;
+    return <div className="w-full h-full flex items-center justify-center"><p className="text-gray-500">{statusMessage || 'Loading test results...'}</p></div>;
   }
 
   if (error) {
@@ -74,7 +101,6 @@ const TestResultsView: React.FC = () => {
   const finalDataPoint = chartData[chartData.length - 1];
 
   return (
-    // Apply a transform scale to zoom out the content to 100%
     <div className="w-full h-full relative" style={{ overflow: 'hidden' }}>
       <div style={{ 
         transform: 'scale(1)', 
@@ -86,7 +112,6 @@ const TestResultsView: React.FC = () => {
           <h2 className="text-2xl font-semibold mb-4">Test Results</h2>
           
           <div className="grid grid-cols-1 gap-6 mb-6">
-            {/* Loss Chart - reduced height */}
             <div className="bg-white p-4 rounded-lg shadow-md">
               <h3 className="text-lg font-medium mb-2 text-gray-700">Training Loss</h3>
               <div className="h-[200px]">
@@ -134,7 +159,6 @@ const TestResultsView: React.FC = () => {
               </div>
             </div>
 
-            {/* Accuracy Chart - reduced height */}
             <div className="bg-white p-4 rounded-lg shadow-md">
               <h3 className="text-lg font-medium mb-2 text-gray-700">Model Accuracy</h3>
               <div className="h-[200px]">
@@ -183,7 +207,6 @@ const TestResultsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Summary Statistics */}
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div className="bg-blue-50 p-3 rounded-lg">
               <h4 className="text-sm font-medium text-blue-700 mb-1">Final Accuracy</h4>

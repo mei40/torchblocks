@@ -192,39 +192,54 @@ export const downloadNetworkJson = (blocks: Block[], connections: Connection[], 
 };
 
 /**
- * Saves the network JSON to the server's build folder
+ * Saves the network JSON to the server's build folder (via API route)
+ * or directly via IPC if running in Electron.
  */
 export const saveNetworkJsonToServer = async (
   blocks: Block[], 
   connections: Connection[], 
-  filename = 'model.json'
-): Promise<{ success: boolean; message: string }> => {
+  filename: string
+): Promise<{ success: boolean; message: string; path?: string }> => {
   try {
     const jsonContent = convertNetworkToJson(blocks, connections);
-    
-    const response = await fetch('/api/save-model', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ jsonContent, filename }),
-    });
-    
-    const result = await response.json();
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to save model');
+
+    if (window.electronAPI && window.electronAPI.saveModelJson) {
+      console.log('Saving model via Electron IPC...');
+      const resultFromIPC = await window.electronAPI.saveModelJson({ jsonContent, filename });
+
+      if (!resultFromIPC.success) {
+        throw new Error(resultFromIPC.message || 'Failed to save model via IPC');
+      }
+      return { 
+        success: true, 
+        message: resultFromIPC.message || `Model saved successfully via IPC to ${resultFromIPC.path}`,
+        path: resultFromIPC.path
+      };
+    } else {
+      console.log('Saving model via fetch to API route...');
+      const response = await fetch('/api/save-model', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ jsonContent, filename }),
+      });
+      
+      const resultFromHttp = await response.json();
+      
+      if (!resultFromHttp.success) {
+        throw new Error(resultFromHttp.error || resultFromHttp.message || 'Failed to save model via API');
+      }
+      
+      return { 
+        success: true, 
+        message: resultFromHttp.message || `Model saved to server build folder`,
+        path: resultFromHttp.path
+      };
     }
-    
-    return { 
-      success: true, 
-      message: result.message || `Model saved to build/${filename}`
-    };
   } catch (error) {
-    console.error('Error saving model to server:', error);
-    return { 
-      success: false, 
-      message: error instanceof Error ? error.message : 'Unknown error occurred'
-    };
+    console.error('Error saving model to server (in saveNetworkJsonToServer):', error);
+    const message = error instanceof Error ? error.message : 'An unknown error occurred';
+    return { success: false, message: `Error saving network: ${message}`, path: undefined };
   }
 };
