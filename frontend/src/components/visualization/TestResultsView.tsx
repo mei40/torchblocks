@@ -45,11 +45,11 @@ const TestResultsView: React.FC = () => {
           }
         } else {
           setStatusMessage('Fetching results via HTTP API...');
-          const response = await fetch('/api/get-test-results');
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-          }
+        const response = await fetch('/api/get-test-results');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
           results = await response.json() as ResultsData;
           success = true;
         }
@@ -57,13 +57,13 @@ const TestResultsView: React.FC = () => {
         if (success && results) {
           const processedData: DataPoint[] = results.losses.map((lossPoint: [number, number], index: number) => {
             const accuracyPoint = results.accuracies[index] || [lossPoint[0], 0];
-            return {
+          return {
               epoch: parseFloat(lossPoint[0].toFixed(2)),
-              loss: lossPoint[1],
-              accuracy: accuracyPoint[1],
-            };
-          });
-          setChartData(processedData);
+            loss: lossPoint[1],
+            accuracy: accuracyPoint[1],
+          };
+        });
+        setChartData(processedData);
           setStatusMessage('Results loaded.');
         } else if (!success && fetchError) {
           throw new Error(fetchError);

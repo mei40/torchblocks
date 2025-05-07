@@ -1,17 +1,52 @@
 {
   "name": "electron_app",
   "version": "1.0.0",
+  "description": "TorchBlocks Electron Shell",
   "main": "main.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder",
+    "package": "electron-builder"
   },
   "keywords": [],
-  "author": "",
+  "author": "Your Name",
   "license": "ISC",
-  "description": "",
   "devDependencies": {
     "electron": "^36.1.0",
     "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.torchblocks.desktopapp",
+    "productName": "TorchBlocks",
+    "copyright": "Copyright © 2024 Your Name",
+    "directories": {
+      "output": "../../dist_electron3",
+      "app": "."
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "node_modules/",
+      "C:/Users/chhab/OneDrive/Desktop/49595/TorchC/torchblocks/frontend/out/**",
+      "C:/Users/chhab/OneDrive/Desktop/49595/TorchC/torchblocks/backend/antlr/**",
+      "C:/Users/chhab/OneDrive/Desktop/49595/TorchC/torchblocks/backend/build/**",
+      "C:/Users/chhab/OneDrive/Desktop/49595/TorchC/torchblocks/backend/google/**",
+      "C:/Users/chhab/OneDrive/Desktop/49595/TorchC/torchblocks/backend/local/**",
+      "C:/Users/chhab/OneDrive/Desktop/49595/TorchC/torchblocks/backend/__init__.py",
+      "C:/Users/chhab/OneDrive/Desktop/49595/TorchC/torchblocks/backend/requirements.txt",
+      "C:/Users/chhab/OneDrive/Desktop/49595/TorchC/torchblocks/backend/run_all.sh",
+      "C:/Users/chhab/OneDrive/Desktop/49595/TorchC/torchblocks/backend/setup_python.sh",
+      "C:/Users/chhab/OneDrive/Desktop/49595/TorchC/torchblocks/backend/upload_files.sh"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "asar": false
   }
 }

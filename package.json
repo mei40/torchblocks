@@ -1,0 +1,62 @@
+{
+    "name": "torchblocks-app",
+    "version": "1.0.0",
+    "description": "TorchBlocks Electron Application",
+    "main": "electron_app/main.js",
+    "scripts": {
+      "start": "electron .",
+      "build:frontend": "cd frontend && npm run build",
+      "dev": "npm run build:frontend && electron .",
+      "package": "electron-builder",
+      "dist": "electron-builder"
+    },
+    "keywords": [
+      "electron",
+      "pytorch",
+      "torchblocks"
+    ],
+    "author": "Your Name",
+    "license": "ISC",
+    "devDependencies": {
+      "electron": "^28.2.3",
+      "electron-builder": "^24.9.1"
+    },
+    "dependencies": {
+      "fs-extra": "^11.2.0"
+    },
+    "build": {
+      "appId": "com.torchblocks.desktopapp",
+      "productName": "TorchBlocks",
+      "copyright": "Copyright © 2024 Your Name",
+      "directories": {
+        "output": "dist_electron_14",
+        "app": "."
+      },
+      "files": [
+        "electron_app/main.js",
+        "electron_app/preload.js",
+        "node_modules/",
+        "frontend/out/**",
+        "backend/antlr/**",
+        "backend/build/**",
+        "backend/google/**",
+        "backend/local/**",
+        "backend/__init__.py",
+        "backend/requirements.txt",
+        "backend/run_all.sh",
+        "backend/setup_python.sh",
+        "backend/upload_files.sh"
+      ],
+      "win": {
+        "target": "nsis"
+      },
+      "mac": {
+        "target": "dmg"
+      },
+      "linux": {
+        "target": "AppImage"
+      },
+      "asar": true
+    }
+  }
+  

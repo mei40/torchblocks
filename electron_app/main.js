@@ -1,8 +1,14 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol } = require('electron');
 const path = require('path');
 const url = require('url'); // Import the 'url' module
 const { spawn } = require('child_process'); // Added for running external commands
 const fs = require('fs').promises; // Added for file system operations
+const fsSync = require('fs'); // For synchronous checks like existsSync
+
+// At the very top of electron_app/main.js
+process.on('uncaughtException', (error) => {
+  console.error('Main Uncaught Exception:', error);
+});
 
 // --- User-Writable Data Paths ---
 // Base path for all application-specific writable data
@@ -31,15 +37,33 @@ const GOOGLE_BUILD_PATH = path.join(DYNAMIC_DATA_ROOT_PATH, 'google', 'build');
 // If direct IPC calls to run_main.py produce logs, they could be piped to a file in DYNAMIC_DATA_ROOT_PATH.
 // const APP_LOG_PATH = path.join(DYNAMIC_DATA_ROOT_PATH, 'logs');
 
+// Ensure directories exist (using synchronous fs for simplicity at startup)
+if (!fsSync.existsSync(DYNAMIC_DATA_ROOT_PATH)) fsSync.mkdirSync(DYNAMIC_DATA_ROOT_PATH, { recursive: true });
+if (!fsSync.existsSync(MODEL_CONFIG_PATH)) fsSync.mkdirSync(MODEL_CONFIG_PATH, { recursive: true });
+if (!fsSync.existsSync(COMPILE_OUTPUT_PATH)) fsSync.mkdirSync(COMPILE_OUTPUT_PATH, { recursive: true });
+if (!fsSync.existsSync(RUN_OUTPUT_PATH)) fsSync.mkdirSync(RUN_OUTPUT_PATH, { recursive: true });
+// if (!fsSync.existsSync(GOOGLE_BUILD_PATH)) fsSync.mkdirSync(GOOGLE_BUILD_PATH, { recursive: true });
+
 // Helper function to run a command and return a promise
-function runCommand(command, args, cwd, customEnv = null, progressCallback, statusCallback) {
+function runCommand(command, args, cwd, customEnv = null, progressCallback, statusCallback, useShell = false) {
   return new Promise((resolve, reject) => {
-    const options = { cwd, shell: true, stdio: 'pipe' };
+    const options = { cwd, stdio: 'pipe' }; // Removed shell:true default
     if (customEnv) {
       options.env = { ...process.env, ...customEnv };
     }
 
-    if (statusCallback) statusCallback(`Executing: ${command} ${args.join(' ')} in ${cwd}`);
+    if (useShell) {
+        if (process.platform === 'win32') {
+            options.shell = process.env.ComSpec || 'cmd.exe';
+        } else {
+            options.shell = true; // Default shell for non-Windows
+        }
+    } else {
+        options.shell = false;
+    }
+
+    if (statusCallback) statusCallback(`Executing: ${command} ${args.join(' ')} in ${cwd} (shell: ${options.shell})`);
+    console.log(`Executing: ${command} ${args.join(' ')} in ${cwd} with options:`, options);
 
     const childProcess = spawn(command, args, options);
     let stdout = '';
@@ -68,147 +92,169 @@ function runCommand(command, args, cwd, customEnv = null, progressCallback, stat
         if (statusCallback) statusCallback(`Command finished successfully: ${command} ${args.join(' ')}`);
         resolve({ stdout, stderr });
       } else {
-        const errorMsg = `Command failed with code ${code}: ${command} ${args.join(' ')}\\nStderr: ${stderr}\\nStdout: ${stdout}`;
+        const errorMsg = `Command failed with code ${code}: ${command} ${args.join(' ')}\nStderr: ${stderr}\nStdout: ${stdout}`;
         if (statusCallback) statusCallback(errorMsg);
+        console.error(errorMsg); // Ensure full error is logged server-side
         reject(new Error(errorMsg));
       }
     });
 
     childProcess.on('error', (err) => {
-      if (statusCallback) statusCallback(`Command execution error: ${err.message}`);
-      reject(err);
+      // This 'error' is for spawn itself, e.g., command not found (ENOENT)
+      const errorMsg = `Command execution error for '${command}': ${err.message}`;
+      if (statusCallback) statusCallback(errorMsg);
+      console.error(errorMsg, err); // Log the original error object too
+      reject(err); // err is already an Error object
     });
   });
 }
 
 function createWindow () {
-  const mainWindow = new BrowserWindow({
-    width: 1200, // You can adjust the size
-    height: 800,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'), // <--- UNCOMMENT AND VERIFY THIS LINE
-      nodeIntegration: false, // Recommended for security
-      contextIsolation: true, // Recommended for security
-    }
-  });
+    const win = new BrowserWindow({
+      width: 1200,
+      height: 800,
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+        webSecurity: true
+      }
+    });
+  
+    /* ── CHANGED SECTION ──────────────────────────────────────────────── */
+    const isDev = !app.isPackaged;
+  
+    // dev run  → torchblocks/frontend/out/index.html
+    // prod run → app.asar/frontend/out/index.html
+    const projectRoot = path.join(__dirname, '..'); // If main.js is electron_app/, then __dirname is .../electron_app
+    const indexPath = isDev
+      ? path.join(projectRoot, 'frontend', 'out', 'index.html')
+      : path.join(app.getAppPath(), 'frontend', 'out', 'index.html');
+  
+    console.log('Project root determined as:', projectRoot);
+    console.log('Attempting to load:', indexPath);
+  
+    win.webContents.on('did-fail-load',
+      (_e, code, description, validatedURL, isMainFrame) => {
+        console.error('did-fail-load:', code, description, validatedURL, isMainFrame);
+        if (isMainFrame && validatedURL.startsWith('file://')){
+            console.error(`Could not load: ${validatedURL}. Check if the file exists and paths are correct.`);
+            console.error(`Ensure frontend is built (npm run build:frontend from project root) and output is in 'frontend/out'.`);
+        }
+      });
+  
+    win.webContents.on('did-finish-load', () => {
+      console.log('Main window loaded successfully');
+    });
+  
+    // Electron wraps the path in a proper file:// URL internally
+    win.loadFile(indexPath);
 
-  // Construct the path to the Next.js export's index.html
-  // __dirname here is torchblocks/electron_app/
-  // So we go up one level to torchblocks/, then into frontend/out/index.html
-  const startUrl = url.format({
-    pathname: path.join(__dirname, '../frontend/out/index.html'), // Adjusted path
-    protocol: 'file:',
-    slashes: true
-  });
-
-  mainWindow.loadURL(startUrl);
-  // Or, if you want to serve it over HTTP (more complex setup for HMR in dev):
-  // For a static export, 'file://' protocol is simplest for now.
-
-  // Open the DevTools (optional, for debugging)
-  // mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools(); 
 }
 
 app.whenReady().then(() => {
+  // --- TEMPORARILY COMMENT OUT PROTOCOL REGISTRATION ---
+  /*
+  protocol.registerSchemesAsPrivileged([
+    { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, allowServiceWorkers: true } }
+  ]);
+
+  protocol.registerFileProtocol('app', (request, callback) => {
+    let requestedPath = request.url.slice('app://.'.length);
+    if (requestedPath.includes('?')) {
+      requestedPath = requestedPath.split('?')[0];
+    }
+    let resolvedPath;
+    const frontendOutDirName = 'frontend/out';
+    if (app.isPackaged) {
+      resolvedPath = path.join(app.getAppPath(), frontendOutDirName, requestedPath);
+    } else {
+      resolvedPath = path.join(__dirname, '..', frontendOutDirName, requestedPath);
+    }
+    const safeOutDir = app.isPackaged ? path.join(app.getAppPath(), frontendOutDirName) : path.join(__dirname, '..', frontendOutDirName);
+    if (!path.normalize(resolvedPath).startsWith(path.normalize(safeOutDir))) {
+        console.error(`[Custom Protocol] Blocked potentially unsafe path request: ${request.url} resolving to ${resolvedPath}`);
+        return callback({ error: -6 });
+    }
+    console.log(`[Custom Protocol] Request: ${request.url} => Resolved Path: ${resolvedPath}`);
+    callback({ path: resolvedPath });
+  });
+  */
+  // --- END OF TEMPORARILY COMMENTED OUT SECTION ---
+
   createWindow();
 
   // IPC Handler for Python Environment Setup
   ipcMain.handle('install-python-env', async (event) => {
-    const projectRootPathForReqs = path.join(__dirname, '..'); // Path to project root to find backend/requirements.txt
+    const projectRootPathForReqs = path.join(__dirname, '..'); // torchblocks root
     const requirementsFilePath = path.join(projectRootPathForReqs, 'backend', 'requirements.txt');
     
     const windows = BrowserWindow.getAllWindows();
     const mainWindow = windows.length > 0 ? windows[0] : null;
 
     const sendStatusUpdate = (message) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('install-python-env-status', message);
-      }
+      if (mainWindow) mainWindow.webContents.send('install-python-env-status', message);
       console.log(message);
     };
     const sendProgressUpdate = (logMsg) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('install-python-env-progress', logMsg);
-      }
-      // console.log(logMsg); // Progress logs can be verbose for console, optional
+      if (mainWindow) mainWindow.webContents.send('install-python-env-progress', logMsg);
     };
 
-    let pythonCmd = 'python3'; // Default
+    let pythonCmd = 'python'; // Directly check for 'python'
 
     try {
-      sendStatusUpdate('Step 1/4: Checking Python 3 availability...');
+      sendStatusUpdate('Step 1/4: Checking Python availability...');
       try {
-        await runCommand(pythonCmd, ['--version'], projectRootPathForReqs, null, sendProgressUpdate, sendStatusUpdate);
-        sendStatusUpdate('Python 3 found.');
+        await runCommand(pythonCmd, ['--version'], projectRootPathForReqs, null, sendProgressUpdate, sendStatusUpdate, true);
+        sendStatusUpdate('Python found.');
       } catch (error) {
-        sendStatusUpdate('Python 3 check failed. Trying "python"...');
-        pythonCmd = 'python'; // Fallback to 'python'
-        try {
-            await runCommand(pythonCmd, ['--version'], projectRootPathForReqs, null, sendProgressUpdate, sendStatusUpdate);
-            sendStatusUpdate('Python (fallback) found.');
-        } catch (fallbackError) {
-            sendStatusUpdate('Python check failed for both "python3" and "python".');
-            console.error('Python 3 is not installed or not found in PATH.', fallbackError);
-            return { success: false, message: 'Python 3 is not installed or not found in PATH.', log: `${error.message}\\n${fallbackError.message}` };
-        }
+        const pyNotFoundMsg = 'Python check failed. Ensure Python is installed and in PATH.';
+        sendStatusUpdate(pyNotFoundMsg);
+        console.error(pyNotFoundMsg, error);
+        return { success: false, message: pyNotFoundMsg, log: error.message };
       }
 
-      sendStatusUpdate(`Step 2/4: Creating virtual environment at: ${VENV_PATH}`);
-      await runCommand(pythonCmd, ['-m', 'venv', VENV_PATH], USER_DATA_PATH, null, sendProgressUpdate, sendStatusUpdate);
+      // Venv creation and pip install: useShell = true
+      sendStatusUpdate(`Step 2/4: Creating virtual environment at: ${VENV_PATH} using ${pythonCmd}`);
+      await runCommand(pythonCmd, ['-m', 'venv', VENV_PATH], USER_DATA_PATH, null, sendProgressUpdate, sendStatusUpdate, true);
       sendStatusUpdate('Virtual environment created.');
 
-      let venvPythonExecutable = '';
-      if (process.platform === 'win32') {
-        venvPythonExecutable = path.join(VENV_PATH, 'Scripts', 'python.exe');
-      } else {
-        venvPythonExecutable = path.join(VENV_PATH, 'bin', 'python');
-      }
+      let venvPythonExecutable = process.platform === 'win32' ? path.join(VENV_PATH, 'Scripts', 'python.exe') : path.join(VENV_PATH, 'bin', 'python');
       sendStatusUpdate(`Virtual environment Python executable: ${venvPythonExecutable}`);
 
       sendStatusUpdate(`Step 3/4: Installing dependencies from ${requirementsFilePath}...`);
       const installResult = await runCommand(
         venvPythonExecutable,
         ['-m', 'pip', 'install', '-r', requirementsFilePath],
-        USER_DATA_PATH, // CWD for pip install can also be USER_DATA_PATH
-        null, // no customEnv
-        sendProgressUpdate, // progress callback
-        sendStatusUpdate    // status callback
+        USER_DATA_PATH, 
+        null, 
+        sendProgressUpdate, 
+        sendStatusUpdate,
+        true // useShell = true for pip install
       );
       sendStatusUpdate('Step 4/4: Dependencies installed successfully.');
       
-      return { success: true, message: 'Python environment setup complete!', log: installResult.stdout + '\\n' + installResult.stderr };
+      return { success: true, message: 'Python environment setup complete!', log: installResult.stdout + '\n' + installResult.stderr };
 
     } catch (error) {
-      console.error('Error during Python environment setup:', error);
-      sendStatusUpdate(`Error during Python environment setup: ${error.message}`);
-      return { success: false, message: `Error setting up Python environment: ${error.message}`, log: error.stack };
+      const setupErrorMsg = `Error during Python environment setup: ${error.message}`;
+      console.error('Critical error during Python environment setup:', error); // Log full error object
+      sendStatusUpdate(setupErrorMsg);
+      return { success: false, message: setupErrorMsg, log: error.stack };
     }
   });
 
   // IPC Handler for running compile_main.py
   ipcMain.handle('run-compile-main', async (event, modelJsonPathFromFrontend) => {
-    const projectRoot = path.join(__dirname, '..'); // For script path and CWD
+    const projectRoot = path.join(__dirname, '..');
     const compileScriptPath = path.join(projectRoot, 'backend', 'antlr', 'compile_main.py');
-    // modelJsonPathFromFrontend is the absolute path to model.json (e.g., in MODEL_CONFIG_PATH)
-    
     const outputPrimaryModelPyPath = path.join(COMPILE_OUTPUT_PATH, 'PrimaryModel.py');
 
     const windows = BrowserWindow.getAllWindows();
     const mainWindow = windows.length > 0 ? windows[0] : null;
-
-    const sendStatus = (message) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('compile-main-status', message);
-      }
-      console.log(message);
-    };
-    const sendProgress = (logMsg) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('compile-main-progress', logMsg);
-      }
-      // console.log(logMsg); 
-    };
-    
+    const sendStatus = (message) => { if (mainWindow) mainWindow.webContents.send('compile-main-status', message); console.log(message); };
+    const sendProgress = (logMsg) => { if (mainWindow) mainWindow.webContents.send('compile-main-progress', logMsg); };    
     const venvPythonExecutable = process.platform === 'win32' ? path.join(VENV_PATH, 'Scripts', 'python.exe') : path.join(VENV_PATH, 'bin', 'python');
 
     try {
@@ -216,14 +262,18 @@ app.whenReady().then(() => {
       await fs.mkdir(COMPILE_OUTPUT_PATH, { recursive: true });
       sendStatus('Output directory prepared.');
 
-      sendStatus(`Step 2/3: Starting code generation (compile_main.py) for ${modelJsonPathFromFrontend}...`);
+      // modelJsonPathFromFrontend is expected to be the path to the model.json saved by save-model-json IPC
+      // which should be an absolute path now, or resolvable from projectRoot.
+      // Let's assume modelJsonPathFromFrontend is absolute or correctly relative from projectRoot.
+      const absoluteModelJsonPath = path.isAbsolute(modelJsonPathFromFrontend) ? modelJsonPathFromFrontend : path.join(projectRoot, modelJsonPathFromFrontend);
+
+      sendStatus(`Step 2/3: Starting code generation (compile_main.py) for ${absoluteModelJsonPath}...`);
+      // Python scripts: useShell = true
       const result = await runCommand(
         venvPythonExecutable, 
-        [compileScriptPath, modelJsonPathFromFrontend, outputPrimaryModelPyPath], // Args: script, input_json, output_py
+        [compileScriptPath, absoluteModelJsonPath, outputPrimaryModelPyPath], 
         path.join(projectRoot, 'backend', 'antlr'), // CWD for compile_main.py
-        null, 
-        sendProgress, 
-        sendStatus 
+        null, sendProgress, sendStatus, true
       );
       sendStatus('Step 3/3: Code generation finished!');
       return { success: true, message: 'compile_main.py executed successfully.', log: result.stdout + '\n' + result.stderr };
@@ -236,25 +286,16 @@ app.whenReady().then(() => {
 
   // IPC Handler for running run_main.py
   ipcMain.handle('run-run-main', async (event, epochs) => {
-    const projectRoot = path.join(__dirname, '..'); // For script path and CWD
+    const projectRoot = path.join(__dirname, '..');
     const runScriptPath = path.join(projectRoot, 'backend', 'local', 'run_main.py');
-    const numEpochs = epochs || '2'; // Default to 2 epochs if not provided
-    
+    const numEpochs = epochs || '2';
     const inputPrimaryModelPyPath = path.join(COMPILE_OUTPUT_PATH, 'PrimaryModel.py');
     const outputResultsJsonPath = path.join(RUN_OUTPUT_PATH, 'local_results.json');
 
     const windows = BrowserWindow.getAllWindows();
     const mainWindow = windows.length > 0 ? windows[0] : null;
-
-    const sendStatus = (message) => {
-      if (mainWindow) mainWindow.webContents.send('run-main-status', message);
-      console.log(message);
-    };
-    const sendProgress = (logMsg) => {
-      if (mainWindow) mainWindow.webContents.send('run-main-progress', logMsg);
-      // console.log(logMsg);
-    };
-    
+    const sendStatus = (message) => { if (mainWindow) mainWindow.webContents.send('run-main-status', message); console.log(message); };
+    const sendProgress = (logMsg) => { if (mainWindow) mainWindow.webContents.send('run-main-progress', logMsg); };    
     const venvPythonExecutable = process.platform === 'win32' ? path.join(VENV_PATH, 'Scripts', 'python.exe') : path.join(VENV_PATH, 'bin', 'python');
 
     try {
@@ -263,14 +304,12 @@ app.whenReady().then(() => {
       sendStatus('Results directory prepared.');
 
       sendStatus(`Step 2/3: Starting model training (run_main.py) for ${numEpochs} epochs...`);
-      // run_main.py will take: numEpochs, inputPrimaryModelPyPath, outputResultsJsonPath
+      // Python scripts: useShell = true
       const result = await runCommand(
         venvPythonExecutable, 
         [runScriptPath, numEpochs.toString(), inputPrimaryModelPyPath, outputResultsJsonPath], 
-        projectRoot, // CWD for run_main.py (e.g., project root for backend.local imports)
-        null, 
-        sendProgress, 
-        sendStatus
+        projectRoot, 
+        null, sendProgress, sendStatus, true
       );
       sendStatus('Step 3/3: Model training finished!');
       return { success: true, message: 'run_main.py executed successfully.', log: result.stdout + '\n' + result.stderr };
@@ -283,18 +322,18 @@ app.whenReady().then(() => {
 
   // IPC Handler for saving the model JSON
   ipcMain.handle('save-model-json', async (event, { jsonContent, filename }) => {
-    // const projectRoot = path.join(__dirname, '..'); // torchblocks root - No longer directly needed for output path
-    // Save within MODEL_CONFIG_PATH relative to project root
-    // const buildDir = path.join(projectRoot, 'frontend', 'build'); // OLD PATH
-    const filePath = path.join(MODEL_CONFIG_PATH, filename);
+    // filename will be 'model.json'
+    // Save to MODEL_CONFIG_PATH (userData) and also return this path for compile_main to use.
+    const targetDir = MODEL_CONFIG_PATH; // All dynamic data under userData as per current variable defs.
+    const filePath = path.join(targetDir, filename);
 
     try {
-      // Ensure the directory exists
-      await fs.mkdir(MODEL_CONFIG_PATH, { recursive: true });
-      // Write the file
+      await fs.mkdir(targetDir, { recursive: true });
       await fs.writeFile(filePath, jsonContent, 'utf-8');
       console.log(`Model saved via IPC to: ${filePath}`);
-      return { success: true, message: `Model saved to ${filePath}`, path: filePath }; // Return the full, new path
+      // The 'run-compile-main' handler expects an absolute path or one resolvable from project root.
+      // Providing absolute path to the saved model.json in userData seems simplest.
+      return { success: true, message: `Model saved to ${filePath}`, path: filePath }; 
     } catch (error) {
       console.error('IPC Error saving model JSON:', error);
       return { success: false, message: `Failed to save model: ${error.message}` };
@@ -345,8 +384,31 @@ app.whenReady().then(() => {
     }
   });
 
-  // ... (other IPC handlers like get-run-logs, generate-notebook, ensure-client-secrets if kept)
-  // These would also need to use the VENV_PATH and appropriate DYNAMIC_DATA_ROOT_PATH subdirectories.
+  ipcMain.handle('get-env-diagnostics', async (event) => {
+    console.log('---- Electron Main Process Environment Diagnostics ----');
+    const mainProcessPath = process.env.PATH;
+    const mainProcessComSpec = process.env.ComSpec;
+    console.log('Main Process process.env.PATH:', mainProcessPath);
+    console.log('Main Process process.env.ComSpec:', mainProcessComSpec);
+
+    // Attempt to list contents of a few common Python installation paths if on Windows
+    // This is a long shot, just for extra info
+    if (process.platform === 'win32') {
+        const commonPathsToTry = [
+            'C:\\Python312', 'C:\\Python311', 'C:\\Python310', 'C:\\Python39', 'C:\\Python38',
+            path.join(process.env.USERPROFILE || 'C:\\Users\\Default', 'AppData\\Local\\Programs\\Python')
+        ];
+        for (const pth of commonPathsToTry) {
+            try {
+                const dirContents = fsSync.readdirSync(pth);
+                console.log(`Contents of ${pth}:`, dirContents.join(', ') || '(empty)');
+            } catch (e) {
+                // console.log(`Could not read dir ${pth}: ${e.message}`);
+            }
+        }
+    }
+    return { path: mainProcessPath, comSpec: mainProcessComSpec };
+  });
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

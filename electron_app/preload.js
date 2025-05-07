@@ -19,27 +19,34 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   installPythonEnv: () => ipcRenderer.invoke('install-python-env'),
   // For progress/status updates (optional but recommended)
-  onInstallPythonEnvProgress: (callback) => ipcRenderer.on('install-python-env-progress', (_event, ...args) => callback(...args)),
-  onInstallPythonEnvStatus: (callback) => ipcRenderer.on('install-python-env-status', (_event, ...args) => callback(...args)),
+  onInstallPythonEnvProgress: (callback) => ipcRenderer.on('install-python-env-progress', (_event, value) => callback(value)),
+  onInstallPythonEnvStatus: (callback) => ipcRenderer.on('install-python-env-status', (_event, value) => callback(value)),
   // We will add more specific functions here later, e.g.,
   // getLogs: () => ipcRenderer.invoke('get-logs'),
   // runTests: (params) => ipcRenderer.invoke('run-tests', params),
   runCompileMain: (modelJsonPath) => ipcRenderer.invoke('run-compile-main', modelJsonPath),
-  onCompileMainProgress: (callback) => ipcRenderer.on('compile-main-progress', (_event, ...args) => callback(...args)),
-  onCompileMainStatus: (callback) => ipcRenderer.on('compile-main-status', (_event, ...args) => callback(...args)),
+  onCompileMainProgress: (callback) => ipcRenderer.on('compile-main-progress', (_event, value) => callback(value)),
+  onCompileMainStatus: (callback) => ipcRenderer.on('compile-main-status', (_event, value) => callback(value)),
   runRunMain: (epochs) => ipcRenderer.invoke('run-run-main', epochs),
-  onRunMainProgress: (callback) => ipcRenderer.on('run-main-progress', (_event, ...args) => callback(...args)),
-  onRunMainStatus: (callback) => ipcRenderer.on('run-main-status', (_event, ...args) => callback(...args)),
+  onRunMainProgress: (callback) => ipcRenderer.on('run-main-progress', (_event, value) => callback(value)),
+  onRunMainStatus: (callback) => ipcRenderer.on('run-main-status', (_event, value) => callback(value)),
   // IPC call for saving model JSON
-  saveModelJson: (jsonData) => ipcRenderer.invoke('save-model-json', jsonData),
+  saveModelJson: (data) => ipcRenderer.invoke('save-model-json', data),
 
   // IPC call for fetching test results
   getTestResults: () => ipcRenderer.invoke('get-test-results'),
-  onTestResultsStatus: (callback) => ipcRenderer.on('test-results-status', (_event, ...args) => callback(...args)),
+  onTestResultsStatus: (callback) => ipcRenderer.on('test-results-status', (_event, value) => callback(value)),
 
   // IPC call for fetching model code
   getModelCode: () => ipcRenderer.invoke('get-model-code'),
-  onModelCodeStatus: (callback) => ipcRenderer.on('model-code-status', (_event, ...args) => callback(...args)),
+  onModelCodeStatus: (callback) => ipcRenderer.on('model-code-status', (_event, value) => callback(value)),
+
+  // Main to Renderer (Invoke/Handle)
+  getUserDataPath: () => ipcRenderer.invoke('get-user-data-path'),
+  getEnvDiagnostics: () => ipcRenderer.invoke('get-env-diagnostics'),
+
+  // Cleanup for listeners
+  removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
 });
 
-console.log('Preload script loaded.');
+console.log('Preload script loaded. ElectronAPI exposed with getEnvDiagnostics.');
